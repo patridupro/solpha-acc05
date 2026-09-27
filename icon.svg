@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="SOLPHA">
+  <defs>
+    <linearGradient id="c" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3ecbff"/>
+      <stop offset="1" stop-color="#19a7e0"/>
+    </linearGradient>
+    <linearGradient id="v" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#c084ff"/>
+      <stop offset="1" stop-color="#7a3cff"/>
+    </linearGradient>
+    <linearGradient id="l" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ddff6a"/>
+      <stop offset="1" stop-color="#9fd400"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="108" fill="#0b0d12"/>
+  <circle cx="256" cy="256" r="188" fill="none" stroke="#e2b84a" stroke-width="6" opacity=".7"/>
+  <circle cx="256" cy="256" r="148" fill="none" stroke="#e2b84a" stroke-width="4" opacity=".45"/>
+  <g transform="rotate(-18 256 256)">
+    <rect x="118" y="168" width="276" height="46" rx="23" fill="url(#c)"/>
+    <rect x="118" y="233" width="276" height="46" rx="23" fill="url(#v)"/>
+    <rect x="118" y="298" width="276" height="46" rx="23" fill="url(#l)"/>
+  </g>
+</svg>
