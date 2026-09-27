@@ -2,7 +2,11 @@
 
 PWA theo dõi SOL/USDT futures đa khung (5M, 15M, 1H, 4H, 1D), RSI / EMA / Bollinger, cảnh báo khi **đồng pha + chạm band**.
 
-## Deploy lên Cloudflare Pages (miễn phí, đang dùng)
+## Link đang chạy (GitHub Pages)
+
+https://patridupro.github.io/solpha-acc05/ — nhánh `gh-pages` là bản publish. Đường dẫn trong app đều tương đối nên chạy được cả ở gốc domain (Netlify/Cloudflare) lẫn thư mục con (GitHub Pages).
+
+## Deploy lên Cloudflare Pages (miễn phí)
 
 1. dash.cloudflare.com → **Workers & Pages → Create → tab Pages → Connect to Git** → chọn `patridupro/solpha-acc05`.
 2. Production branch: nhánh chính của repo. Framework preset: **None**. Build command: **để trống**. Build output directory: **để trống** (gốc repo).

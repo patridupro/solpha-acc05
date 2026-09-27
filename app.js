@@ -223,7 +223,7 @@ function nextHourLabel() {
 }
 async function notify(title, body) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
-  const opts = { body, icon: "/icons/icon-192.png", badge: "/icons/icon-192.png", tag: "solpha-alert", renotify: true, vibrate: [200, 100, 200] };
+  const opts = { body, icon: "icons/icon-192.png", badge: "icons/icon-192.png", tag: "solpha-alert", renotify: true, vibrate: [200, 100, 200] };
   if ($("chkSound").checked) beep();
   // Chrome Android không cho dùng new Notification() — bắt buộc đi qua service worker.
   try {
@@ -306,7 +306,7 @@ $("btnNotify").addEventListener("click", async () => {
 });
 $("btnRefresh").addEventListener("click", () => fullScan("manual"));
 $("selPrice").addEventListener("change", schedulePrice);
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {});
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js", { scope: "./" }).catch(() => {});
 if ("Notification" in window && Notification.permission === "granted") $("btnNotify").textContent = "Cảnh báo đã bật";
 renderLogs(); schedulePrice(); scheduleHourly(); fullScan("boot");
 setInterval(() => fullScan("watch"), 5 * 60 * 1000);

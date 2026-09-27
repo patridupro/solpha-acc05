@@ -1,8 +1,8 @@
-const CACHE = "solpha-v3";
+const CACHE = "solpha-v4";
 const ASSETS = [
-  "/", "/index.html", "/styles.css", "/app.js", "/manifest.webmanifest", "/icon.svg",
-  "/icons/icon-192.png", "/icons/icon-512.png", "/icons/maskable-192.png", "/icons/maskable-512.png",
-  "/icons/apple-touch-icon.png", "/icons/favicon-32.png"
+  "./", "./index.html", "./styles.css", "./app.js", "./manifest.webmanifest", "./icon.svg",
+  "./icons/icon-192.png", "./icons/icon-512.png", "./icons/maskable-192.png", "./icons/maskable-512.png",
+  "./icons/apple-touch-icon.png", "./icons/favicon-32.png"
 ];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
@@ -24,7 +24,7 @@ self.addEventListener("fetch", (e) => {
         caches.open(CACHE).then((c) => c.put(e.request, copy));
       }
       return res;
-    }).catch(() => caches.match(e.request, { ignoreSearch: true }).then((hit) => hit || caches.match("/index.html")))
+    }).catch(() => caches.match(e.request, { ignoreSearch: true }).then((hit) => hit || caches.match("./index.html")))
   );
 });
 self.addEventListener("notificationclick", (e) => {
@@ -32,7 +32,7 @@ self.addEventListener("notificationclick", (e) => {
   e.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
       const win = list.find((c) => "focus" in c);
-      return win ? win.focus() : self.clients.openWindow("/");
+      return win ? win.focus() : self.clients.openWindow("./");
     })
   );
 });
