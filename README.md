@@ -8,7 +8,7 @@ https://patridupro.github.io/solpha-acc05/ — nhánh `gh-pages` là bản publi
 
 ## Playbook cho app sau
 
-Xem [`docs/PWA-DEPLOY-PLAYBOOK.md`](docs/PWA-DEPLOY-PLAYBOOK.md) · tạo icon: `node tools/make-icons.js`.
+Xem [`docs/PWA-DEPLOY-GUIDE.md`](docs/PWA-DEPLOY-GUIDE.md) (bản PDF: `docs/PWA-DEPLOY-GUIDE.pdf`) · skill Claude: `skills/pwa-deploy/` · tạo icon: `node tools/make-icons.js`.
 
 ## Deploy lên Cloudflare Pages (miễn phí, link chính: https://solpha.pages.dev)
 
