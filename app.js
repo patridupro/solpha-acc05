@@ -144,8 +144,8 @@ function candleTrigger(map, align) {
     const big = range >= TRIGGER.minRange;
     const closeTop = pos >= 1 - TRIGGER.closeZone;
     const closeBottom = pos <= TRIGGER.closeZone;
-    const bbClosed = bollinger(candles.slice(0, -1).map((c) => c.c), 20, 2);
-    const chasing = (bbClosed && bbClosed.pctB >= 0.95) || htfAtUpper.length > 0;
+    // Chase chỉ xét khung lớn: nến long mạnh tự chạm BB trên của khung nhỏ vẫn được giữ.
+    const chasing = htfAtUpper.length > 0;
     const rejected = touchedUpper(candles, TRIGGER.rejectLookback) || h1Rejected;
     const long = big && closeTop && htfUp && !chasing;
     const short = big && closeBottom && htfDown && rejected;
