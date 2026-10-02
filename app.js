@@ -6,7 +6,13 @@ const TFS = [
   { key: "1d", label: "1D", binance: "1d", rank: 4 }
 ];
 const ENDPOINTS = ["https://fapi.binance.com", "https://fapi1.binance.com", "https://api.binance.com"];
-let lastAlertKey = localStorage.getItem("solpha_last_alert") || "";
+const TRIGGER = { minRange: 0.55, closeZone: 0.25, tfs: ["5m", "15m"], rejectLookback: 3 };
+const store = {
+  get(k, d) { try { return localStorage.getItem(k) ?? d; } catch (_) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} }
+};
+let lastAlertKey = store.get("solpha_last_alert", "");
+let lastTriggerKey = store.get("solpha_last_trigger", "");
 let deferredPrompt = null;
 let priceTimer = null;
 let hourTimer = null;
@@ -114,7 +120,55 @@ function analyze(candles) {
     if (bb.pctB >= 0.95 || last >= bb.upper) band = "upper";
     else if (bb.pctB <= 0.05 || last <= bb.lower) band = "lower";
   }
-  return { last, e9, e21, rsi: r, bb, dir, band };
+  return { last, e9, e21, rsi: r, bb, dir, band, candles };
+}
+// Nến tín hiệu: xét nến ĐÃ ĐÓNG gần nhất (bỏ nến đang chạy) trên 5M và 15M.
+function candleTrigger(map, align) {
+  const htfUp = align.d1 === "tang" && align.h4 === "tang" && align.h1 === "tang";
+  const htfDown = align.d1 === "giam" && align.h4 === "giam" && align.h1 === "giam";
+  const htfAtUpper = ["1h", "4h", "1d"].filter((k) => map[k].band === "upper");
+  const touchedUpper = (candles, lookback) => {
+    const closes = candles.map((c) => c.c);
+    for (let i = candles.length - 2; i >= Math.max(20, candles.length - 1 - lookback); i--) {
+      const bb = bollinger(closes.slice(0, i + 1), 20, 2);
+      if (bb && candles[i].h >= bb.upper) return true;
+    }
+    return false;
+  };
+  const h1Rejected = touchedUpper(map["1h"].candles, 2);
+  return TRIGGER.tfs.map((key) => {
+    const candles = map[key].candles;
+    const k = candles[candles.length - 2];
+    const range = k.h - k.l;
+    const pos = range > 0 ? (k.c - k.l) / range : 0.5;
+    const big = range >= TRIGGER.minRange;
+    const closeTop = pos >= 1 - TRIGGER.closeZone;
+    const closeBottom = pos <= TRIGGER.closeZone;
+    const bbClosed = bollinger(candles.slice(0, -1).map((c) => c.c), 20, 2);
+    const chasing = (bbClosed && bbClosed.pctB >= 0.95) || htfAtUpper.length > 0;
+    const rejected = touchedUpper(candles, TRIGGER.rejectLookback) || h1Rejected;
+    const long = big && closeTop && htfUp && !chasing;
+    const short = big && closeBottom && htfDown && rejected;
+    const why = [];
+    if (!big) why.push(`range ${fmt(range)} < ${TRIGGER.minRange}`);
+    else if (!closeTop && !closeBottom) why.push(`đóng giữa nến (${Math.round(pos * 100)}%)`);
+    if (big && closeTop && !htfUp) why.push("1D/4H/1H chưa cùng tăng");
+    if (big && closeTop && htfUp && chasing) why.push("đang chase BB trên" + (htfAtUpper.length ? " (" + htfAtUpper.map((x) => x.toUpperCase()).join(",") + ")" : ""));
+    if (big && closeBottom && !htfDown) why.push("1D/4H/1H chưa cùng giảm");
+    if (big && closeBottom && htfDown && !rejected) why.push("chưa chạm/từ chối BB trên");
+    return { key, label: key.toUpperCase(), t: k.t, o: k.o, h: k.h, l: k.l, c: k.c, range, pos, long, short, why };
+  });
+}
+function renderTrigger(trig) {
+  const hit = trig.find((x) => x.long || x.short);
+  const card = $("trigCard");
+  card.className = "card " + (hit ? (hit.long ? "trig-long" : "trig-short") : "");
+  $("trigText").textContent = hit ? `${hit.long ? "LONG" : "SHORT"} TRIGGER · ${hit.label}` : "Chưa có nến tín hiệu";
+  $("trigBody").innerHTML = trig.map((x) => {
+    const time = new Date(x.t).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" });
+    const sig = x.long ? '<span class="tag tang">LONG</span>' : x.short ? '<span class="tag giam">SHORT</span>' : '<span class="tag in">—</span>';
+    return `<tr><td><b>${x.label}</b> ${time}</td><td>${fmt(x.o)} → ${fmt(x.c)}</td><td>${fmt(x.range)}</td><td>${Math.round(x.pos * 100)}%</td><td>${sig}</td><td class="muted">${x.long || x.short ? "Đủ điều kiện" : x.why.join(" · ") || "—"}</td></tr>`;
+  }).join("");
 }
 function alignment(map) {
   const d1 = map["1d"].dir, h4 = map["4h"].dir, h1 = map["1h"].dir, m15 = map["15m"].dir;
@@ -254,6 +308,8 @@ async function fullScan(reason = "manual") {
     const bands = bandHits(map);
     renderTable(map);
     const fire = setStatus(align, bands);
+    const trig = candleTrigger(map, align);
+    renderTrigger(trig);
     $("orderBox").textContent = buildOrder(price, map, align, bands);
     $("updated").textContent = nowVN();
     const summary = fire ? `CẢNH BÁO ${align.dir} @ ${fmt(price)} · ${bands.hits.map((h) => h.label).join(",")}` : `WAIT ${fmt(price)} · 1D ${align.d1} / 4H ${align.h4} / 1H ${align.h1}`;
@@ -262,9 +318,18 @@ async function fullScan(reason = "manual") {
       const key = `${align.dir}-${bands.hits.map((h) => h.key + h.band).join("")}-${Math.round(price)}`;
       if (key !== lastAlertKey) {
         lastAlertKey = key;
-        localStorage.setItem("solpha_last_alert", key);
+        store.set("solpha_last_alert", key);
         await notify("SOLPHA cảnh báo", summary);
       }
+    }
+    for (const x of trig.filter((t) => t.long || t.short)) {
+      const key = `${x.key}-${x.t}-${x.long ? "L" : "S"}`;
+      if (key === lastTriggerKey) continue;
+      lastTriggerKey = key;
+      store.set("solpha_last_trigger", key);
+      const msg = `${x.long ? "LONG" : "SHORT"} trigger ${x.label} · nến ${fmt(x.o)}→${fmt(x.c)} (range ${fmt(x.range)}, đóng ${Math.round(x.pos * 100)}%) · 1D/4H/1H ${align.d1}`;
+      addLog(msg, true);
+      await notify("SOLPHA nến tín hiệu", msg);
     }
   } catch (e) {
     $("orderBox").textContent = "Lỗi tải dữ liệu: " + (e.message || e);
@@ -309,4 +374,8 @@ $("selPrice").addEventListener("change", schedulePrice);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js", { scope: "./" }).catch(() => {});
 if ("Notification" in window && Notification.permission === "granted") $("btnNotify").textContent = "Cảnh báo đã bật";
 renderLogs(); schedulePrice(); scheduleHourly(); fullScan("boot");
-setInterval(() => fullScan("watch"), 5 * 60 * 1000);
+// Quét ngay sau mỗi mốc 5 phút (+8s) để bắt từng nến 5M vừa đóng.
+(function scheduleWatch() {
+  const ms = 5 * 60 * 1000 - (Date.now() % (5 * 60 * 1000)) + 8000;
+  setTimeout(() => { fullScan("watch"); scheduleWatch(); }, ms);
+})();

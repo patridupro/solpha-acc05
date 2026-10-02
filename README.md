@@ -41,4 +41,7 @@ Xem [`docs/PWA-DEPLOY-GUIDE.md`](docs/PWA-DEPLOY-GUIDE.md) (bản PDF: `docs/PWA
 ## Rule
 - Đồng pha = 1D + 4H + 1H cùng hướng, 15M không ngược mạnh.
 - Cảnh báo khi đồng pha và chạm BB trên ≥2 khung, có ≥1 khung ≥1H.
+- Nến tín hiệu (xét nến **đã đóng** 5M và 15M, quét ngay sau mỗi mốc 5 phút):
+  - **Long**: range ≥ $0.55, close ≥ low + 0.75×range, 1D/4H/1H đều tăng, không chase BB trên (%B nến < 0.95 và 1H/4H/1D không chạm upper).
+  - **Short**: range ≥ $0.55, close ≤ low + 0.25×range, 1D/4H/1H đều giảm, high chạm BB trên trong 3 nến gần nhất của khung đó hoặc 2 nến 1H gần nhất.
 - Không phải tư vấn tài chính. Tự quản size/leverage.

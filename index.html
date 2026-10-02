@@ -65,6 +65,20 @@
         <p id="nextScan" class="muted">Quét giờ tới: —</p>
       </article>
     </section>
+    <section class="card" id="trigCard">
+      <div class="section-head">
+        <h2>Nến tín hiệu</h2>
+        <span class="pill dim">Nến đã đóng · 5M / 15M</span>
+      </div>
+      <p id="trigText" class="big">Đang quét…</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Khung</th><th>Mở → Đóng</th><th>Range</th><th>Vị trí đóng</th><th>Tín hiệu</th><th>Ghi chú</th></tr></thead>
+          <tbody id="trigBody"></tbody>
+        </table>
+      </div>
+      <p class="muted">Long: nến ≥ $0.55, đóng ở 25% trên, 1D/4H/1H tăng, không chase BB trên. Short: nến ≥ $0.55, đóng ở 25% dưới, 1D/4H/1H giảm, vừa chạm/từ chối BB trên.</p>
+    </section>
     <section class="card">
       <div class="section-head">
         <h2>Đa khung</h2>
@@ -104,6 +118,8 @@
           <li>Cảnh báo chỉ khi đồng pha VÀ chạm BB trên ≥2 khung, trong đó có ≥1 khung 1H/4H/1D.</li>
           <li>Long thuận trend: ưu tiên chạm lower. Không chase upper weekly/daily.</li>
           <li>Short chỉ khi HTF đã bear. SL/TP viết tới 2 số thập phân.</li>
+          <li>Nến tín hiệu LONG: nến 5M/15M đã đóng có range ≥ $0.55, close ≥ low + 0.75×range, 1D+4H+1H tăng, không chase BB trên (%B nến &lt; 0.95, 1H/4H/1D không chạm upper).</li>
+          <li>Nến tín hiệu SHORT: range ≥ $0.55, close ≤ low + 0.25×range, 1D+4H+1H giảm, high chạm BB trên trong 3 nến gần nhất (hoặc 2 nến 1H gần nhất).</li>
           <li>Tự quản size/leverage. Futures có thể mất hết tài khoản.</li>
         </ol>
         <div class="settings">

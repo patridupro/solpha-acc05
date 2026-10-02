@@ -89,3 +89,8 @@ footer { text-align: center; padding: 8px 16px 28px; font-size: 12px; }
   .price { font-size: 36px; }
   .top { flex-direction: column; align-items: flex-start; }
 }
+
+#trigCard .big { margin: 4px 0 10px; }
+#trigCard.trig-long { box-shadow: inset 0 0 0 1px rgba(62,224,160,.55); }
+#trigCard.trig-short { box-shadow: inset 0 0 0 1px rgba(255,93,115,.55); }
+#trigCard .muted { font-size: 12px; margin-top: 8px; }
