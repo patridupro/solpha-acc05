@@ -2,9 +2,9 @@
 
 PWA theo dõi SOL/USDT futures đa khung (5M, 15M, 1H, 4H, 1D), RSI / EMA / Bollinger, cảnh báo khi **đồng pha + chạm band**.
 
-## Link đang chạy (GitHub Pages)
+## Link đang chạy
 
-https://patridupro.github.io/solpha-acc05/ — nhánh `gh-pages` là bản publish. Đường dẫn trong app đều tương đối nên chạy được cả ở gốc domain (Netlify/Cloudflare) lẫn thư mục con (GitHub Pages).
+https://solpha.pages.dev — Cloudflare Pages build từ nhánh `claude/intelligent-lamport-vrk29w` của repo này (1 build mỗi lần push). Đường dẫn trong app đều tương đối nên vẫn chạy được nếu sau này chuyển sang GitHub Pages/Netlify.
 
 ## Playbook cho app sau
 
