@@ -39,7 +39,7 @@ Xem [`docs/PWA-DEPLOY-GUIDE.md`](docs/PWA-DEPLOY-GUIDE.md) (bản PDF: `docs/PWA
 - Kiểm tra bằng Chromium DevTools Protocol `Page.getInstallabilityErrors` → **0 lỗi**.
 
 ## Rule
-- Đồng pha = 1D + 4H + 1H cùng hướng EMA9/21 **và MACD(12,26,9) histogram cùng dấu** trên cả 3 khung, 15M không ngược mạnh. Nến tín hiệu Long/Short cũng yêu cầu điều kiện này.
+- Đồng pha = 1D + 4H + 1H cùng hướng EMA9/21, 15M không ngược mạnh. MACD(12,26,9) chỉ hiển thị để tham khảo (đã bỏ khỏi điều kiện vì làm lỡ nhiều cơ hội).
 - Cảnh báo khi đồng pha và chạm BB trên ≥2 khung, có ≥1 khung ≥1H.
 - Nến tín hiệu (xét nến **đã đóng** 5M và 15M, quét ngay sau mỗi mốc 5 phút):
   - **Long**: range ≥ $0.55, close ≥ low + 0.75×range, 1D/4H/1H đều tăng, không chase BB trên (1H/4H/1D không chạm upper; nến tự chạm BB trên khung 5M/15M vẫn hợp lệ).

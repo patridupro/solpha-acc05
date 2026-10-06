@@ -144,8 +144,8 @@ function analyze(candles) {
 }
 // Nến tín hiệu: xét nến ĐÃ ĐÓNG gần nhất (bỏ nến đang chạy) trên 5M và 15M.
 function candleTrigger(map, align) {
-  const htfUp = align.d1 === "tang" && align.h4 === "tang" && align.h1 === "tang" && align.macdAligned;
-  const htfDown = align.d1 === "giam" && align.h4 === "giam" && align.h1 === "giam" && align.macdAligned;
+  const htfUp = align.d1 === "tang" && align.h4 === "tang" && align.h1 === "tang";
+  const htfDown = align.d1 === "giam" && align.h4 === "giam" && align.h1 === "giam";
   const htfAtUpper = ["1h", "4h", "1d"].filter((k) => map[k].band === "upper");
   const touchedUpper = (candles, lookback) => {
     const closes = candles.map((c) => c.c);
@@ -172,9 +172,9 @@ function candleTrigger(map, align) {
     const why = [];
     if (!big) why.push(`range ${fmt(range)} < ${TRIGGER.minRange}`);
     else if (!closeTop && !closeBottom) why.push(`đóng giữa nến (${Math.round(pos * 100)}%)`);
-    if (big && closeTop && !htfUp) why.push("1D/4H/1H (EMA+MACD) chưa cùng tăng");
+    if (big && closeTop && !htfUp) why.push("1D/4H/1H chưa cùng tăng");
     if (big && closeTop && htfUp && chasing) why.push("đang chase BB trên" + (htfAtUpper.length ? " (" + htfAtUpper.map((x) => x.toUpperCase()).join(",") + ")" : ""));
-    if (big && closeBottom && !htfDown) why.push("1D/4H/1H (EMA+MACD) chưa cùng giảm");
+    if (big && closeBottom && !htfDown) why.push("1D/4H/1H chưa cùng giảm");
     if (big && closeBottom && htfDown && !rejected) why.push("chưa chạm/từ chối BB trên");
     return { key, label: key.toUpperCase(), t: k.t, o: k.o, h: k.h, l: k.l, c: k.c, range, pos, long, short, why };
   });
@@ -194,11 +194,11 @@ function alignment(map) {
   const d1 = map["1d"].dir, h4 = map["4h"].dir, h1 = map["1h"].dir, m15 = map["15m"].dir;
   const sameHTF = d1 === h4 && h4 === h1 && d1 !== "sideway";
   const m15Opp = (d1 === "tang" && m15 === "giam") || (d1 === "giam" && m15 === "tang");
-  // MACD 1D/4H/1H phải cùng hướng với xu hướng EMA.
+  // MACD chỉ để tham khảo, không chặn tín hiệu (bỏ vì làm lỡ nhiều cơ hội).
   const md = (k) => (map[k].macd ? map[k].macd.dir : "sideway");
   const macdD1 = md("1d"), macdH4 = md("4h"), macdH1 = md("1h");
   const macdAligned = sameHTF && macdD1 === d1 && macdH4 === d1 && macdH1 === d1;
-  const aligned = sameHTF && !m15Opp && macdAligned;
+  const aligned = sameHTF && !m15Opp;
   return { aligned, dir: aligned ? d1 : null, sameHTF, m15Opp, macdAligned, macdD1, macdH4, macdH1, d1, h4, h1, m15 };
 }
 function bandHits(map) {
@@ -212,10 +212,10 @@ function buildOrder(price, map, align, bands) {
     return [
       "KHÔNG CẢNH BÁO — chưa đồng pha / chưa chạm BB đủ điều kiện.",
       `1D ${align.d1.toUpperCase()} · 4H ${align.h4.toUpperCase()} · 1H ${align.h1.toUpperCase()} · 15M ${align.m15.toUpperCase()}`,
-      `MACD hist: 1D ${align.macdD1} · 4H ${align.macdH4} · 1H ${align.macdH1}${align.macdAligned ? " (đồng pha)" : " (chưa đồng pha)"}`,
+      `MACD hist: 1D ${align.macdD1} · 4H ${align.macdH4} · 1H ${align.macdH1}${align.macdAligned ? " (cùng pha)" : " (lệch pha)"} — tham khảo`,
       `Giá hiện tại: ${fmt(price)}`,
       "Ưu tiên: WAIT. Không chase, không đoán.",
-      "App sẽ tự viết lệnh khi 1D+4H+1H cùng hướng (EMA + MACD) và ≥2 khung chạm band (có khung ≥1H)."
+      "App sẽ tự viết lệnh khi 1D+4H+1H cùng hướng và ≥2 khung chạm band (có khung ≥1H)."
     ].join("\n");
   }
   const bb4 = map["4h"].bb;
@@ -277,7 +277,7 @@ function setStatus(align, bands) {
   ac.className = "card status " + (align.aligned ? "ok" : "warn");
   $("alignText").textContent = align.aligned ? `ĐỒNG PHA ${align.dir.toUpperCase()}` : "CHƯA ĐỒNG PHA";
   const mTxt = (m) => (m === "tang" ? "↑" : m === "giam" ? "↓" : "–");
-  $("alignDetail").textContent = `EMA: 1D ${align.d1} · 4H ${align.h4} · 1H ${align.h1} · 15M ${align.m15}${align.m15Opp ? " (15M ngược)" : ""} | MACD: 1D ${mTxt(align.macdD1)} 4H ${mTxt(align.macdH4)} 1H ${mTxt(align.macdH1)}${align.sameHTF && !align.macdAligned ? " (MACD lệch pha)" : ""}`;
+  $("alignDetail").textContent = `EMA: 1D ${align.d1} · 4H ${align.h4} · 1H ${align.h1} · 15M ${align.m15}${align.m15Opp ? " (15M ngược)" : ""} | MACD: 1D ${mTxt(align.macdD1)} 4H ${mTxt(align.macdH4)} 1H ${mTxt(align.macdH1)}${align.sameHTF && !align.macdAligned ? " (lệch pha, tham khảo)" : ""}`;
   const fire = align.aligned && bands.ready;
   al.className = "card status " + (fire ? "bad" : "warn");
   $("alertText").textContent = fire ? "CẢNH BÁO" : "KHÔNG CẢNH BÁO";

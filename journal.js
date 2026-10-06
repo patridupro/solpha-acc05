@@ -4,7 +4,7 @@
   const KEY = "solpha_journal";
   const CRITERIA = [
     { id: "kyluat", w: 30, name: "Kỷ luật theo chỉ báo", hint: "Chỉ vào khi app đủ điều kiện; đứng ngoài khi WAIT." },
-    { id: "setup", w: 25, name: "Setup đúng", hint: "Đồng pha EMA + MACD, chạm BB / nến tín hiệu đạt." },
+    { id: "setup", w: 25, name: "Setup đúng", hint: "Đồng pha 1D/4H/1H, chạm BB / nến tín hiệu đạt." },
     { id: "ruiro", w: 20, name: "Quản trị rủi ro", hint: "Đặt SL trước khi vào; mỗi lệnh rủi ro ≤ 1–2% tài khoản." },
     { id: "chianho", w: 15, name: "Chia nhỏ lệnh", hint: "Vào 2–3 phần tại vùng setup tốt, không all-in một giá." },
     { id: "tamly", w: 10, name: "Không FOMO / gỡ / chase", hint: "Không vào vì sợ lỡ, không gỡ lỗ, không đuổi BB trên." }
