@@ -302,7 +302,11 @@ function setStatus(align, bands) {
   al.className = "card status " + (fire ? "bad" : "warn");
   $("alertText").textContent = fire ? "CẢNH BÁO" : "KHÔNG CẢNH BÁO";
   $("alertDetail").textContent = bands.hits.length ? bands.hits.map((h) => h.label + " " + h.band).join(" · ") : "Chưa chạm cận trên/dưới";
-  $("biasText").textContent = fire ? (align.dir === "tang" ? "XEM LONG" : "XEM SHORT") : "WAIT";
+  // Khớp với buildOrder: long chỉ khi chạm BB dưới, short chỉ khi chạm BB trên; ngược lại là chase.
+  const hitU = bands.hits.some((h) => h.band === "upper"), hitL = bands.hits.some((h) => h.band === "lower");
+  $("biasText").textContent = !fire ? "WAIT"
+    : align.dir === "tang" ? (hitL ? "XEM LONG" : "KHÔNG CHASE · chờ pullback")
+    : (hitU ? "XEM SHORT" : "KHÔNG SHORT ĐÁY · chờ hồi");
   return fire;
 }
 function addLog(text, alert) {

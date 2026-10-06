@@ -1,4 +1,4 @@
-const CACHE = "solpha-v10";
+const CACHE = "solpha-v11";
 const ASSETS = [
   "./", "./index.html", "./styles.css", "./signals.js", "./app.js", "./journal.js", "./manifest.webmanifest", "./icon.svg",
   "./icons/icon-192.png", "./icons/icon-512.png", "./icons/maskable-192.png", "./icons/maskable-512.png",
