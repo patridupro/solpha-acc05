@@ -141,3 +141,5 @@ main { grid-template-columns: minmax(0, 1fr); }
 .seg input { width: auto; }
 label.btn { display: inline-flex; align-items: center; font-size: 13px; font-weight: 600; cursor: pointer; }
 #monthCard > p.muted, #jSaved { font-size: 12px; }
+.pnlwrap { display: flex; gap: 6px; }
+.pnlwrap .btn { padding: 0 14px; font-size: 18px; flex-shrink: 0; }

@@ -148,7 +148,9 @@
           </select>
         </label>
         <label>Số lệnh <input type="number" id="jTrades" min="0" step="1" inputmode="numeric" placeholder="0" /></label>
-        <label>PnL ($ hoặc R) <input type="number" id="jPnl" step="0.01" inputmode="decimal" placeholder="vd 12.5 / -1" /></label>
+        <label>PnL ($ hoặc R)
+          <span class="pnlwrap"><button type="button" id="jPnlSign" class="btn ghost" aria-label="Đổi dấu lãi/lỗ">±</button><input type="text" id="jPnl" inputmode="decimal" autocomplete="off" placeholder="vd 12.5 hoặc -1" /></span>
+        </label>
       </div>
       <div id="jCriteria"></div>
       <label class="jnote">Bài học / ghi chú

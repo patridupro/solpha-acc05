@@ -14,6 +14,13 @@
   const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (_) { return {}; } };
   const save = (db) => { try { localStorage.setItem(KEY, JSON.stringify(db)); return true; } catch (_) { return false; } };
   const today = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Ho_Chi_Minh" });
+  // Chấp nhận "-1,5", "−1.5", "+2": bàn phím số Android thường thiếu dấu trừ nên có nút ± hỗ trợ.
+  const parsePnl = (s) => {
+    const t = String(s ?? "").trim().replace(/[−–]/g, "-").replace(",", ".").replace(/\s/g, "");
+    if (t === "" || t === "-" || t === "+") return null;
+    const n = Number(t);
+    return Number.isFinite(n) ? n : NaN;
+  };
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   function score(entry) {
@@ -42,7 +49,7 @@
     for (const k of CRITERIA) c[k.id] = (document.querySelector(`input[name="j_${k.id}"]:checked`) || {}).value || "na";
     return {
       mode: $("jMode").value, c,
-      trades: Number($("jTrades").value || 0), pnl: $("jPnl").value === "" ? null : Number($("jPnl").value),
+      trades: Number($("jTrades").value || 0), pnl: parsePnl($("jPnl").value),
       note: $("jNote").value.trim(), updated: Date.now()
     };
   }
@@ -143,7 +150,9 @@
     $("jMonth").addEventListener("change", renderMonth);
     $("jSave").addEventListener("click", () => {
       const date = $("jDate").value || today();
-      const db = load(); db[date] = readForm();
+      const entry = readForm();
+      if (Number.isNaN(entry.pnl)) { $("jSaved").textContent = "PnL không hợp lệ — chỉ nhập số, ví dụ -1.5"; $("jPnl").focus(); return; }
+      const db = load(); db[date] = entry;
       $("jSaved").textContent = save(db) ? `Đã lưu ${date} · ${score(db[date]) ?? "—"} điểm (${grade(score(db[date]))})` : "Không lưu được (trình duyệt chặn bộ nhớ)";
       if (date.startsWith($("jMonth").value)) renderMonth();
     });
@@ -151,6 +160,11 @@
       const tr = e.target.closest("tr[data-day]"); if (!tr) return;
       $("jDate").value = tr.dataset.day; fillForm(tr.dataset.day);
       $("jDate").scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    $("jPnlSign").addEventListener("click", () => {
+      const v = $("jPnl").value.trim().replace(/^[−–]/, "-");
+      $("jPnl").value = v.startsWith("-") ? v.slice(1) : "-" + v.replace(/^\+/, "");
+      $("jPnl").focus();
     });
     $("jCsv").addEventListener("click", exportCSV);
     $("jBackup").addEventListener("click", () => download(`solpha-nhat-ky-backup-${today()}.json`, JSON.stringify(load(), null, 2), "application/json"));
