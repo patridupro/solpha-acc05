@@ -143,3 +143,11 @@ label.btn { display: inline-flex; align-items: center; font-size: 13px; font-wei
 #monthCard > p.muted, #jSaved { font-size: 12px; }
 .pnlwrap { display: flex; gap: 6px; }
 .pnlwrap .btn { padding: 0 14px; font-size: 18px; flex-shrink: 0; }
+
+.plan { font-size: 13px; line-height: 1.6; }
+.plan .muted { font-size: 12px; }
+.btbox { margin-top: 8px; font-size: 13px; }
+.btbox .muted { font-size: 12px; margin: 6px 0; }
+td.up { color: var(--up); } td.down { color: var(--down); }
+.settings { display: grid; gap: 8px; }
+.settings input[type=number], .settings select { background: #0b0e15; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; max-width: 100%; }

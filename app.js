@@ -6,7 +6,6 @@ const TFS = [
   { key: "1d", label: "1D", binance: "1d", rank: 4 }
 ];
 const ENDPOINTS = ["https://fapi.binance.com", "https://fapi1.binance.com", "https://api.binance.com"];
-const TRIGGER = { minRange: 0.55, closeZone: 0.25, tfs: ["5m", "15m"], rejectLookback: 3 };
 const store = {
   get(k, d) { try { return localStorage.getItem(k) ?? d; } catch (_) { return d; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} }
@@ -116,8 +115,8 @@ async function loadTicker() {
     if (data && data.lastFundingRate != null) $("funding").textContent = (Number(data.lastFundingRate) * 100).toFixed(4) + "%";
   } catch (_) {}
 }
-async function loadKlines(interval) {
-  const { data } = await withBase(`/api/v3/klines?symbol=SOLUSDT&interval=${interval}&limit=120`, `/fapi/v1/klines?symbol=SOLUSDT&interval=${interval}&limit=120`);
+async function loadKlines(interval, limit = 220) {
+  const { data } = await withBase(`/api/v3/klines?symbol=SOLUSDT&interval=${interval}&limit=${Math.min(limit, 1000)}`, `/fapi/v1/klines?symbol=SOLUSDT&interval=${interval}&limit=${limit}`);
   return data.map((k) => ({ t: k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5] }));
 }
 function analyze(candles) {
@@ -142,53 +141,74 @@ function analyze(candles) {
   }
   return { last, e9, e21, rsi: r, bb, dir, band, candles, macd: md };
 }
-// Nến tín hiệu: xét nến ĐÃ ĐÓNG gần nhất (bỏ nến đang chạy) trên 5M và 15M.
-function candleTrigger(map, align) {
-  const htfUp = align.d1 === "tang" && align.h4 === "tang" && align.h1 === "tang";
-  const htfDown = align.d1 === "giam" && align.h4 === "giam" && align.h1 === "giam";
-  const htfAtUpper = ["1h", "4h", "1d"].filter((k) => map[k].band === "upper");
-  const touchedUpper = (candles, lookback) => {
-    const closes = candles.map((c) => c.c);
-    for (let i = candles.length - 2; i >= Math.max(20, candles.length - 1 - lookback); i--) {
-      const bb = bollinger(closes.slice(0, i + 1), 20, 2);
-      if (bb && candles[i].h >= bb.upper) return true;
-    }
-    return false;
+// ---- Nến tín hiệu (bộ máy trong signals.js) ----
+function sigOptions() {
+  return {
+    rule: store.get("solpha_rule", "atr"),
+    sessionFilter: store.get("solpha_session", "1") === "1",
+    setups: { A: store.get("solpha_setupA", "1") === "1", B: store.get("solpha_setupB", "1") === "1" }
   };
-  const h1Rejected = touchedUpper(map["1h"].candles, 2);
-  return TRIGGER.tfs.map((key) => {
-    const candles = map[key].candles;
-    const k = candles[candles.length - 2];
-    const range = k.h - k.l;
-    const pos = range > 0 ? (k.c - k.l) / range : 0.5;
-    const big = range >= TRIGGER.minRange;
-    const closeTop = pos >= 1 - TRIGGER.closeZone;
-    const closeBottom = pos <= TRIGGER.closeZone;
-    // Chase chỉ xét khung lớn: nến long mạnh tự chạm BB trên của khung nhỏ vẫn được giữ.
-    const chasing = htfAtUpper.length > 0;
-    const rejected = touchedUpper(candles, TRIGGER.rejectLookback) || h1Rejected;
-    const long = big && closeTop && htfUp && !chasing;
-    const short = big && closeBottom && htfDown && rejected;
-    const why = [];
-    if (!big) why.push(`range ${fmt(range)} < ${TRIGGER.minRange}`);
-    else if (!closeTop && !closeBottom) why.push(`đóng giữa nến (${Math.round(pos * 100)}%)`);
-    if (big && closeTop && !htfUp) why.push("1D/4H/1H chưa cùng tăng");
-    if (big && closeTop && htfUp && chasing) why.push("đang chase BB trên" + (htfAtUpper.length ? " (" + htfAtUpper.map((x) => x.toUpperCase()).join(",") + ")" : ""));
-    if (big && closeBottom && !htfDown) why.push("1D/4H/1H chưa cùng giảm");
-    if (big && closeBottom && htfDown && !rejected) why.push("chưa chạm/từ chối BB trên");
-    return { key, label: key.toUpperCase(), t: k.t, o: k.o, h: k.h, l: k.l, c: k.c, range, pos, long, short, why };
+}
+function htfContext(map, align) {
+  const h1 = map["1h"], P1 = SolphaSignals.prepare(h1.candles);
+  let h1RejectUpper = false;
+  for (let j = h1.candles.length - 2; j >= h1.candles.length - 3; j--) if (P1.bb[j] && h1.candles[j].h >= P1.bb[j].upper) h1RejectUpper = true;
+  return {
+    up: align.d1 === "tang" && align.h4 === "tang" && align.h1 === "tang",
+    down: align.d1 === "giam" && align.h4 === "giam" && align.h1 === "giam",
+    chaseUp: ["1h", "4h", "1d"].filter((k) => map[k].band === "upper").map((k) => k.toUpperCase()),
+    h1Upper: h1.bb && h1.bb.upper, h1Lower: h1.bb && h1.bb.lower, h1RejectUpper
+  };
+}
+function candleTrigger(map, align) {
+  const htf = htfContext(map, align), opt = sigOptions();
+  return [["5m", 5], ["15m", 15]].map(([key, min]) => {
+    const candles = map[key].candles, P = SolphaSignals.prepare(candles);
+    return { key, label: key.toUpperCase(), ...SolphaSignals.evaluate(P, candles.length - 2, htf, min, opt) };
   });
 }
 function renderTrigger(trig) {
-  const hit = trig.find((x) => x.long || x.short);
-  const card = $("trigCard");
-  card.className = "card " + (hit ? (hit.long ? "trig-long" : "trig-short") : "");
-  $("trigText").textContent = hit ? `${hit.long ? "LONG" : "SHORT"} TRIGGER · ${hit.label}` : "Chưa có nến tín hiệu";
+  const hit = trig.find((x) => x.side);
+  $("trigCard").className = "card " + (hit ? (hit.side === "long" ? "trig-long" : "trig-short") : "");
+  $("trigText").textContent = hit ? `${hit.side.toUpperCase()} · Setup ${hit.setup} · ${hit.label}` : "Chưa có nến tín hiệu";
   $("trigBody").innerHTML = trig.map((x) => {
     const time = new Date(x.t).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" });
-    const sig = x.long ? '<span class="tag tang">LONG</span>' : x.short ? '<span class="tag giam">SHORT</span>' : '<span class="tag in">—</span>';
-    return `<tr><td><b>${x.label}</b> ${time}</td><td>${fmt(x.o)} → ${fmt(x.c)}</td><td>${fmt(x.range)}</td><td>${Math.round(x.pos * 100)}%</td><td>${sig}</td><td class="muted">${x.long || x.short ? "Đủ điều kiện" : x.why.join(" · ") || "—"}</td></tr>`;
+    const sig = x.side ? `<span class="tag ${x.side === "long" ? "tang" : "giam"}">${x.side.toUpperCase()} ${x.setup}</span>` : '<span class="tag in">—</span>';
+    return `<tr><td><b>${x.label}</b> ${time}</td><td>${fmt(x.o)} → ${fmt(x.c)}</td><td>${fmt(x.range)}${x.atrMult ? ` (${fmt(x.atrMult, 1)}×ATR)` : ""}</td><td>${x.volMult ? fmt(x.volMult, 1) + "×" : "—"}</td><td>${x.pos != null ? Math.round(x.pos * 100) + "%" : "—"}</td><td>${sig}</td><td class="muted">${x.side ? "Đủ điều kiện" : x.why.join(" · ") || "—"}</td></tr>`;
   }).join("");
+}
+// Ô Ưu tiên: kế hoạch lệnh của tín hiệu gần nhất (giữ 30 phút).
+function planText(x) {
+  const p = x.plan, acct = Number(store.get("solpha_acct", "0")), riskPct = Number(store.get("solpha_risk", "1"));
+  const riskUsd = acct * riskPct / 100, qty = riskUsd && p.risk ? riskUsd / p.risk : 0;
+  return {
+    head: `${x.side === "long" ? "LONG" : "SHORT"} · Setup ${x.setup} · ${x.label}`,
+    lines: [
+      `Vào 3 phần: ${p.entries.map((e) => fmt(e)).join(" / ")} (TB ${fmt(p.entry)})`,
+      `SL: ${fmt(p.sl)} (rủi ro ${fmt(p.risk)}/SOL)`,
+      `TP1: ${fmt(p.tp1)} (R:R 1:${fmt(p.rr1, 1)}) → dời SL về giá vào`,
+      `TP2: ${fmt(p.tp2)} (R:R 1:${fmt(p.rr2, 1)})`,
+      qty ? `Khối lượng: ${fmt(qty, 2)} SOL ≈ $${fmt(qty * p.entry, 0)} · đòn bẩy ≈ ${fmt(qty * p.entry / acct, 1)}x (rủi ro $${fmt(riskUsd, 0)} = ${riskPct}% vốn), mỗi phần ${fmt(qty / 3, 2)} SOL`
+          : "Nhập vốn ở mục Cài đặt để app tính khối lượng."
+    ]
+  };
+}
+function renderPlan(trig) {
+  const hit = trig.find((x) => x.side && x.key === "5m") || trig.find((x) => x.side);
+  if (hit) store.set("solpha_last_plan", JSON.stringify({ x: hit, exp: Date.now() + 30 * 60000 }));
+  let saved = null;
+  try { saved = JSON.parse(store.get("solpha_last_plan", "null")); } catch (_) {}
+  const card = $("planCard");
+  if (saved && saved.exp > Date.now()) {
+    const t = planText(saved.x);
+    card.className = "card status " + (saved.x.side === "long" ? "ok" : "bad");
+    $("biasText").textContent = t.head;
+    $("planBox").innerHTML = t.lines.map((l) => `<div>${l}</div>`).join("") + `<div class="muted">Nến ${new Date(saved.x.t).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" })} · hết hạn sau ${Math.ceil((saved.exp - Date.now()) / 60000)}′</div>`;
+    return true;
+  }
+  card.className = "card status";
+  $("planBox").innerHTML = "";
+  return false;
 }
 function alignment(map) {
   const d1 = map["1d"].dir, h4 = map["4h"].dir, h1 = map["1h"].dir, m15 = map["15m"].dir;
@@ -336,6 +356,7 @@ async function fullScan(reason = "manual") {
     const fire = setStatus(align, bands);
     const trig = candleTrigger(map, align);
     renderTrigger(trig);
+    if (!renderPlan(trig) && !fire) $("biasText").textContent = "WAIT";
     $("orderBox").textContent = buildOrder(price, map, align, bands);
     $("updated").textContent = nowVN();
     const summary = fire ? `CẢNH BÁO ${align.dir} @ ${fmt(price)} · ${bands.hits.map((h) => h.label).join(",")}` : `WAIT ${fmt(price)} · 1D ${align.d1} / 4H ${align.h4} / 1H ${align.h1}`;
@@ -348,12 +369,13 @@ async function fullScan(reason = "manual") {
         await notify("SOLPHA cảnh báo", summary);
       }
     }
-    for (const x of trig.filter((t) => t.long || t.short)) {
-      const key = `${x.key}-${x.t}-${x.long ? "L" : "S"}`;
+    for (const x of trig.filter((t) => t.side)) {
+      const key = `${x.key}-${x.t}-${x.side}`;
       if (key === lastTriggerKey) continue;
       lastTriggerKey = key;
       store.set("solpha_last_trigger", key);
-      const msg = `${x.long ? "LONG" : "SHORT"} trigger ${x.label} · nến ${fmt(x.o)}→${fmt(x.c)} (range ${fmt(x.range)}, đóng ${Math.round(x.pos * 100)}%) · 1D/4H/1H ${align.d1}`;
+      const p = x.plan;
+      const msg = `${x.side.toUpperCase()} Setup ${x.setup} ${x.label} · vào ${fmt(p.entries[0])}/${fmt(p.entries[1])}/${fmt(p.entries[2])} · SL ${fmt(p.sl)} · TP1 ${fmt(p.tp1)} (1:${fmt(p.rr1, 1)}) · TP2 ${fmt(p.tp2)} (1:${fmt(p.rr2, 1)})`;
       addLog(msg, true);
       await notify("SOLPHA nến tín hiệu", msg);
     }
@@ -405,3 +427,41 @@ renderLogs(); schedulePrice(); scheduleHourly(); fullScan("boot");
   const ms = 5 * 60 * 1000 - (Date.now() % (5 * 60 * 1000)) + 8000;
   setTimeout(() => { fullScan("watch"); scheduleWatch(); }, ms);
 })();
+
+// ---- Cài đặt tín hiệu & quản lý vốn ----
+(function initSettings() {
+  const bind = (id, key, def, isCheck) => {
+    const el = $(id); if (!el) return;
+    if (isCheck) el.checked = store.get(key, def) === "1"; else el.value = store.get(key, def);
+    el.addEventListener("change", () => { store.set(key, isCheck ? (el.checked ? "1" : "0") : el.value); fullScan("manual"); });
+  };
+  bind("inpAcct", "solpha_acct", "", false);
+  bind("inpRisk", "solpha_risk", "1", false);
+  bind("selRule", "solpha_rule", "atr", false);
+  bind("chkSetupA", "solpha_setupA", "1", true);
+  bind("chkSetupB", "solpha_setupB", "1", true);
+  bind("chkSession", "solpha_session", "1", true);
+})();
+// ---- Backtest: so bộ cũ ($0.55) với bộ mới (ATR + volume + Setup A/B) trên dữ liệu thật của Binance ----
+$("btnBacktest").addEventListener("click", async () => {
+  const btn = $("btnBacktest"), out = $("btBox");
+  btn.disabled = true; out.innerHTML = "Đang tải ~1.500 nến 5M và khung lớn từ Binance…";
+  try {
+    const [c5, h1, h4, d1] = await Promise.all([loadKlines("5m", 1500), loadKlines("1h", 400), loadKlines("4h", 300), loadKlines("1d", 200)]);
+    const closed = (a) => a.slice(0, -1);
+    const base = sigOptions();
+    const rows = [
+      ["Bộ cũ ($0.55)", { ...base, rule: "fixed", sessionFilter: false }],
+      ["Bộ mới (A + B)", { ...base, rule: "atr", setups: { A: true, B: true } }],
+      ["Chỉ Setup A", { ...base, rule: "atr", setups: { A: true, B: false } }],
+      ["Chỉ Setup B", { ...base, rule: "atr", setups: { A: false, B: true } }]
+    ].map(([name, o]) => [name, SolphaSignals.backtest(closed(c5), closed(h1), closed(h4), closed(d1), o)]);
+    const r0 = rows[0][1];
+    const day = (t) => new Date(t).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
+    out.innerHTML = `<div class="muted">Từ ${day(r0.from)} đến ${day(r0.to)} · vào ở giá đóng nến, SL = đáy/đỉnh nến ∓ 0.5 ATR, chốt ở 1.5R, tối đa 4 giờ. Nến chạm cả SL và TP tính là thua.</div>
+      <div class="table-wrap"><table><thead><tr><th>Bộ điều kiện</th><th>Số lệnh</th><th>Thắng</th><th>R TB/lệnh</th><th>Tổng R</th><th>Sụt tối đa</th></tr></thead><tbody>${rows.map(([n, r]) =>
+        `<tr><td><b>${n}</b></td><td>${r.n}</td><td>${r.n ? Math.round(r.winRate * 100) + "%" : "—"}</td><td class="${r.avgR >= 0 ? "up" : "down"}">${r.n ? (r.avgR >= 0 ? "+" : "") + fmt(r.avgR) : "—"}</td><td class="${r.totalR >= 0 ? "up" : "down"}">${(r.totalR >= 0 ? "+" : "") + fmt(r.totalR, 1)}R</td><td>${fmt(r.maxDD, 1)}R</td></tr>`).join("")}</tbody></table></div>
+      <div class="muted">Khoảng 5 ngày là mẫu nhỏ — chạy lại mỗi tuần và chỉ tin khi xu hướng lặp lại. Chưa tính phí giao dịch và trượt giá.</div>`;
+  } catch (e) { out.textContent = "Lỗi backtest: " + (e.message || e); }
+  btn.disabled = false;
+});

@@ -41,9 +41,14 @@ Xem [`docs/PWA-DEPLOY-GUIDE.md`](docs/PWA-DEPLOY-GUIDE.md) (bản PDF: `docs/PWA
 ## Rule
 - Đồng pha = 1D + 4H + 1H cùng hướng EMA9/21, 15M không ngược mạnh. MACD(12,26,9) chỉ hiển thị để tham khảo (đã bỏ khỏi điều kiện vì làm lỡ nhiều cơ hội).
 - Cảnh báo khi đồng pha và chạm BB trên ≥2 khung, có ≥1 khung ≥1H.
-- Nến tín hiệu (xét nến **đã đóng** 5M và 15M, quét ngay sau mỗi mốc 5 phút):
-  - **Long**: range ≥ $0.55, close ≥ low + 0.75×range, 1D/4H/1H đều tăng, không chase BB trên (1H/4H/1D không chạm upper; nến tự chạm BB trên khung 5M/15M vẫn hợp lệ).
-  - **Short**: range ≥ $0.55, close ≤ low + 0.25×range, 1D/4H/1H đều giảm, high chạm BB trên trong 3 nến gần nhất của khung đó hoặc 2 nến 1H gần nhất.
+- Nến tín hiệu (nến **đã đóng** 5M/15M, quét ngay sau mỗi mốc 5 phút) — bộ máy trong `signals.js`, dùng chung cho quét trực tiếp và backtest:
+  - Xu hướng: EMA 1D/4H/1H cùng hướng; Long không khi 1H/4H/1D đang chạm BB trên.
+  - Nến: range 1.3–3 × ATR(14), đóng ở 25% trên (Long) / dưới (Short); volume ≥ 1.5 × TB20; RSI ≤ 75 (Long) / ≥ 25 (Short).
+  - **Setup A** (pullback): trong 6 nến đã chạm BB mid, nến tín hiệu đóng lại trên (dưới) mid; cách EMA21 ≤ 1.5 ATR.
+  - **Setup B** (bứt phá sau nén): độ rộng BB nến trước ≤ phân vị 20% của 100 nến, nến đóng vượt BB trên (thủng BB dưới); cách EMA21 ≤ 2.5 ATR.
+  - Tránh giờ funding (07/15/23h VN ±10′), tin Mỹ (19:30/20:30 VN ±15′), 03–06h VN.
+  - Kế hoạch: vào 3 phần (giá đóng / hồi 50% nến / BB mid), SL = đáy (đỉnh) nến ∓ 0.5 ATR, bỏ lệnh nếu rủi ro > 2 ATR, TP1 = 1.5R (dời SL về giá vào), TP2 = 3R hoặc BB 1H nếu cản gần hơn. Khối lượng = vốn × % rủi ro ÷ (giá vào TB − SL).
+  - Bộ cũ (range ≥ $0.55) vẫn chọn được trong Cài đặt. Nút **Backtest** so 4 bộ trên ~1.500 nến 5M thật (vào ở giá đóng, chốt 1.5R, tối đa 4 giờ, nến chạm cả SL/TP tính thua, chưa tính phí).
 
 ## Nhật ký giao dịch & tổng kết tháng
 - Mỗi ngày chấm 5 tiêu chí (Đạt / Không / N/A), trọng số: **Kỷ luật theo chỉ báo 30 · Setup đúng 25 · Quản trị rủi ro 20 · Chia nhỏ lệnh 15 · Không FOMO/gỡ/chase 10**.

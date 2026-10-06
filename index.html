@@ -59,9 +59,10 @@
         <p id="alertText" class="big">—</p>
         <p id="alertDetail" class="muted">Chạm upper nếu %B ≥ 0.95 · lower nếu %B ≤ 0.05</p>
       </article>
-      <article class="card status">
+      <article class="card status" id="planCard">
         <h2>Ưu tiên</h2>
         <p id="biasText" class="big">WAIT</p>
+        <div id="planBox" class="plan"></div>
         <p id="nextScan" class="muted">Quét giờ tới: —</p>
       </article>
     </section>
@@ -73,11 +74,13 @@
       <p id="trigText" class="big">Đang quét…</p>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Khung</th><th>Mở → Đóng</th><th>Range</th><th>Vị trí đóng</th><th>Tín hiệu</th><th>Ghi chú</th></tr></thead>
+          <thead><tr><th>Khung</th><th>Mở → Đóng</th><th>Range</th><th>Volume</th><th>Vị trí đóng</th><th>Tín hiệu</th><th>Ghi chú</th></tr></thead>
           <tbody id="trigBody"></tbody>
         </table>
       </div>
-      <p class="muted">Long: nến ≥ $0.55, đóng ở 25% trên, 1D/4H/1H tăng, không chase BB trên. Short: nến ≥ $0.55, đóng ở 25% dưới, 1D/4H/1H giảm, vừa chạm/từ chối BB trên.</p>
+      <p class="muted">Bộ mới (Long; Short ngược lại): 1D/4H/1H tăng, không chase BB trên khung lớn · nến 1.3–3×ATR(14), đóng 25% trên · volume ≥ 1.5× TB20 · RSI ≤ 75, cách EMA21 ≤ 1.5×ATR · <b>Setup A</b>: đã về BB mid trong 6 nến rồi đóng lại trên mid · <b>Setup B</b>: BB co hẹp (≤ phân vị 20%) rồi đóng vượt BB trên · tránh giờ funding (07/15/23h VN ±10′), tin Mỹ (19:30/20:30 ±15′), 03–06h VN.</p>
+      <div class="jactions"><button id="btnBacktest" class="btn ghost">Backtest 5M (~5 ngày)</button></div>
+      <div id="btBox" class="btbox"></div>
     </section>
     <section class="card">
       <div class="section-head">
@@ -118,11 +121,19 @@
           <li>Cảnh báo chỉ khi đồng pha VÀ chạm BB trên ≥2 khung, trong đó có ≥1 khung 1H/4H/1D.</li>
           <li>Long thuận trend: ưu tiên chạm lower. Không chase upper weekly/daily.</li>
           <li>Short chỉ khi HTF đã bear. SL/TP viết tới 2 số thập phân.</li>
-          <li>Nến tín hiệu LONG: nến 5M/15M đã đóng có range ≥ $0.55, close ≥ low + 0.75×range, 1D+4H+1H tăng, không chase BB trên (1H/4H/1D không chạm upper; nến tự chạm BB trên khung 5M/15M vẫn hợp lệ).</li>
-          <li>Nến tín hiệu SHORT: range ≥ $0.55, close ≤ low + 0.25×range, 1D+4H+1H giảm, high chạm BB trên trong 3 nến gần nhất (hoặc 2 nến 1H gần nhất).</li>
+          <li>SL = đáy (đỉnh) nến tín hiệu ∓ 0.5×ATR. Vào 3 phần: giá đóng / hồi 50% nến / BB mid. Bỏ lệnh nếu rủi ro &gt; 2×ATR. TP1 = 1.5R (dời SL về giá vào), TP2 = 3R hoặc BB 1H nếu xa hơn. Khối lượng = vốn × % rủi ro ÷ (giá vào TB − SL).</li>
+          <li>Nến tín hiệu 5M/15M (bộ mới, mặc định): ATR + volume + Setup A (pullback lấy lại BB mid) / Setup B (bứt phá sau nén) — chi tiết ở ô Nến tín hiệu. Bộ cũ (range ≥ $0.55) vẫn chọn được trong Cài đặt.</li>
           <li>Tự quản size/leverage. Futures có thể mất hết tài khoản.</li>
         </ol>
         <div class="settings">
+          <label>Vốn ($) <input type="number" id="inpAcct" min="0" step="10" inputmode="decimal" placeholder="vd 1000" /></label>
+          <label>Rủi ro mỗi lệnh (%) <input type="number" id="inpRisk" min="0.1" max="5" step="0.1" inputmode="decimal" /></label>
+          <label>Bộ điều kiện nến
+            <select id="selRule"><option value="atr">Mới: ATR + volume + Setup A/B</option><option value="fixed">Cũ: range ≥ $0.55</option></select>
+          </label>
+          <label><input type="checkbox" id="chkSetupA" /> Setup A (pullback)</label>
+          <label><input type="checkbox" id="chkSetupB" /> Setup B (bứt phá sau nén)</label>
+          <label><input type="checkbox" id="chkSession" /> Tránh giờ funding / tin / thanh khoản thấp</label>
           <label><input type="checkbox" id="chkSound" checked /> Âm báo khi cảnh báo</label>
           <label>Làm mới giá
             <select id="selPrice">
@@ -191,6 +202,7 @@
     </section>
   </main>
   <footer>SOLPHA Desk · dữ liệu Binance public API · không phải tư vấn tài chính</footer>
+  <script src="signals.js"></script>
   <script src="app.js"></script>
   <script src="journal.js"></script>
 </body>
