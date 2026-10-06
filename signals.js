@@ -15,6 +15,8 @@
     maxRiskATR: 2,           // bỏ lệnh nếu (entry TB − SL) > 2 ATR
     tp1R: 1.5, tp2R: 3,
     sessionFilter: true,
+    allowBandWalk: true,     // 1H chạm BB trên/dưới vẫn cho vào nếu đang "bám dải" (bứt phá thật)
+    walkRsiMax: 75, walkRsiMin: 25, walkMaxExtATR: 0.5, walkSize: 0.5,
     setups: { A: true, B: true }
   };
 
@@ -76,7 +78,18 @@
     return null;
   }
 
-  // htf: { up: bool, down: bool, chaseUp: [labels], h1Upper, h1Lower, h1RejectUpper: bool }
+  // Bám dải 1H: dải đang mở rộng (so với 3 nến trước), RSI chưa cực đoan, giá không vọt xa khỏi dải.
+  function bandWalk(P1, idx, side, o) {
+    const bb = P1.bb[idx], prev = P1.bb[idx - 3], rsi = P1.rsi[idx], atr = P1.atr[idx], c = P1.closes[idx];
+    if (!bb || !prev || rsi == null || atr == null) return { ok: false, why: "thiếu dữ liệu 1H" };
+    if (bb.width <= prev.width) return { ok: false, why: "dải BB 1H không mở rộng" };
+    if (side === "long" && rsi > o.walkRsiMax) return { ok: false, why: `RSI 1H ${rsi.toFixed(0)} > ${o.walkRsiMax}` };
+    if (side === "short" && rsi < o.walkRsiMin) return { ok: false, why: `RSI 1H ${rsi.toFixed(0)} < ${o.walkRsiMin}` };
+    const ext = side === "long" ? (c - bb.upper) / atr : (bb.lower - c) / atr;
+    if (ext > o.walkMaxExtATR) return { ok: false, why: `giá vọt ${ext.toFixed(1)}×ATR khỏi dải 1H` };
+    return { ok: true };
+  }
+  // htf: { up, down, chaseUp: [labels], chaseDown: [labels], walkLong, walkShort: {ok, why}, h1Upper, h1Lower, h1RejectUpper }
   function evaluate(P, i, htf, tfMinutes, opt) {
     const o = { ...DEFAULTS, ...opt, setups: { ...DEFAULTS.setups, ...(opt && opt.setups) } };
     const k = P.candles[i], atr = P.atr[i], bb = P.bb[i], prevBB = P.bb[i - 1], rsi = P.rsi[i], e21 = P.ema21[i];
@@ -97,7 +110,18 @@
     // 2) Xu hướng khung lớn
     if (dir === "long" && !htf.up) { res.why.push("1D/4H/1H chưa cùng tăng"); return res; }
     if (dir === "short" && !htf.down) { res.why.push("1D/4H/1H chưa cùng giảm"); return res; }
-    if (dir === "long" && htf.chaseUp.length) { res.why.push(`đang chase BB trên (${htf.chaseUp.join(",")})`); return res; }
+    // Chase: 4H/1D ở dải ngoài luôn chặn; riêng 1H được miễn nếu đang bám dải (lệnh Momentum, ½ khối lượng).
+    const chase = dir === "long" ? (htf.chaseUp || []) : (htf.chaseDown || []);
+    const walk = dir === "long" ? htf.walkLong : htf.walkShort;
+    if (chase.length) {
+      const onlyH1 = chase.length === 1 && chase[0] === "1H";
+      if (onlyH1 && o.allowBandWalk && walk && walk.ok) res.momentum = true;
+      else {
+        const band = dir === "long" ? "BB trên" : "BB dưới";
+        res.why.push(onlyH1 && o.allowBandWalk && walk ? `1H ở ${band} nhưng quá đà: ${walk.why}` : `đang chase ${band} (${chase.join(",")})`);
+        return res;
+      }
+    }
 
     if (o.rule === "fixed") {
       // Bộ cũ: short cần chạm/từ chối BB trên trong 3 nến gần nhất hoặc 2 nến 1H.
@@ -146,7 +170,7 @@
     const h1Band = dir === "long" ? htf.h1Upper : htf.h1Lower;
     if (h1Band && sgn * (h1Band - tp1) > 0 && sgn * (tp2 - h1Band) > 0) tp2 = h1Band;
     res.side = dir;
-    res.plan = { entries: [e1, e2, e3], entry, sl, tp1, tp2, risk, rr1: o.tp1R, rr2: Math.abs(tp2 - entry) / risk, slFromClose: Math.abs(e1 - sl) };
+    res.plan = { entries: [e1, e2, e3], entry, sl, tp1, tp2, risk, rr1: o.tp1R, rr2: Math.abs(tp2 - entry) / risk, slFromClose: Math.abs(e1 - sl), sizeFactor: res.momentum ? o.walkSize : 1 };
     return res;
   }
 
@@ -187,9 +211,11 @@
       const a = L1(tClose), b = L4(tClose), d = LD(tClose);
       if (!a || !b || !d) continue;
       const chaseUp = [["1H", a], ["4H", b], ["1D", d]].filter(([, x]) => x.bb && x.bb.pctB >= 0.95).map(([n]) => n);
+      const chaseDown = [["1H", a], ["4H", b], ["1D", d]].filter(([, x]) => x.bb && x.bb.pctB <= 0.05).map(([n]) => n);
+      const walkLong = bandWalk(a.P, a.idx, "long", o), walkShort = bandWalk(a.P, a.idx, "short", o);
       let h1RejectUpper = false;
       for (let j = a.idx; j >= a.idx - 1; j--) if (a.P.bb[j] && a.P.candles[j].h >= a.P.bb[j].upper) h1RejectUpper = true;
-      const htf = { up: a.dir === "tang" && b.dir === "tang" && d.dir === "tang", down: a.dir === "giam" && b.dir === "giam" && d.dir === "giam", chaseUp, h1Upper: a.bb && a.bb.upper, h1Lower: a.bb && a.bb.lower, h1RejectUpper };
+      const htf = { up: a.dir === "tang" && b.dir === "tang" && d.dir === "tang", down: a.dir === "giam" && b.dir === "giam" && d.dir === "giam", chaseUp, chaseDown, walkLong, walkShort, h1Upper: a.bb && a.bb.upper, h1Lower: a.bb && a.bb.lower, h1RejectUpper };
       const sig = evaluate(P, i, htf, tfMinutes, o);
       if (!sig.side) continue;
       const out = outcome(c5, i, sig, o.tp1R);
@@ -205,6 +231,6 @@
       from: c5[100] && c5[100].t, to: c5[c5.length - 1] && c5[c5.length - 1].t };
   }
 
-  const api = { DEFAULTS, prepare, evaluate, outcome, backtest, sessionBlock, atrArr, emaArr, rsiArr, bbArr };
+  const api = { DEFAULTS, prepare, evaluate, outcome, backtest, sessionBlock, bandWalk, atrArr, emaArr, rsiArr, bbArr };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.SolphaSignals = api;
 })(this);

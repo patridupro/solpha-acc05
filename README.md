@@ -42,7 +42,8 @@ Xem [`docs/PWA-DEPLOY-GUIDE.md`](docs/PWA-DEPLOY-GUIDE.md) (bản PDF: `docs/PWA
 - Đồng pha = 1D + 4H + 1H cùng hướng EMA9/21, 15M không ngược mạnh. MACD(12,26,9) chỉ hiển thị để tham khảo (đã bỏ khỏi điều kiện vì làm lỡ nhiều cơ hội).
 - Cảnh báo khi đồng pha và chạm BB trên ≥2 khung, có ≥1 khung ≥1H.
 - Nến tín hiệu (nến **đã đóng** 5M/15M, quét ngay sau mỗi mốc 5 phút) — bộ máy trong `signals.js`, dùng chung cho quét trực tiếp và backtest:
-  - Xu hướng: EMA 1D/4H/1H cùng hướng; Long không khi 1H/4H/1D đang chạm BB trên.
+  - Xu hướng: EMA 1D/4H/1H cùng hướng. 4H/1D ở BB trên (Long) / BB dưới (Short) = chase, chặn.
+  - 1H ở dải ngoài **vẫn cho vào nếu đang bám dải**: BB 1H mở rộng so với 3 nến trước, RSI 1H ≤ 75 (Long) / ≥ 25 (Short), giá không vượt dải quá 0.5 ATR → lệnh **Momentum, ½ khối lượng**. Tắt được trong Cài đặt; backtest có dòng "chặn cứng 1H BB" để so sánh.
   - Nến: range 1.3–3 × ATR(14), đóng ở 25% trên (Long) / dưới (Short); volume ≥ 1.5 × TB20; RSI ≤ 75 (Long) / ≥ 25 (Short).
   - **Setup A** (pullback): trong 6 nến đã chạm BB mid, nến tín hiệu đóng lại trên (dưới) mid; cách EMA21 ≤ 1.5 ATR.
   - **Setup B** (bứt phá sau nén): độ rộng BB nến trước ≤ phân vị 20% của 100 nến, nến đóng vượt BB trên (thủng BB dưới); cách EMA21 ≤ 2.5 ATR.

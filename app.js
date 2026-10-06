@@ -146,6 +146,7 @@ function sigOptions() {
   return {
     rule: store.get("solpha_rule", "atr"),
     sessionFilter: store.get("solpha_session", "1") === "1",
+    allowBandWalk: store.get("solpha_walk", "1") === "1",
     setups: { A: store.get("solpha_setupA", "1") === "1", B: store.get("solpha_setupB", "1") === "1" }
   };
 }
@@ -157,6 +158,9 @@ function htfContext(map, align) {
     up: align.d1 === "tang" && align.h4 === "tang" && align.h1 === "tang",
     down: align.d1 === "giam" && align.h4 === "giam" && align.h1 === "giam",
     chaseUp: ["1h", "4h", "1d"].filter((k) => map[k].band === "upper").map((k) => k.toUpperCase()),
+    chaseDown: ["1h", "4h", "1d"].filter((k) => map[k].band === "lower").map((k) => k.toUpperCase()),
+    walkLong: SolphaSignals.bandWalk(P1, h1.candles.length - 2, "long", { ...SolphaSignals.DEFAULTS, ...sigOptions() }),
+    walkShort: SolphaSignals.bandWalk(P1, h1.candles.length - 2, "short", { ...SolphaSignals.DEFAULTS, ...sigOptions() }),
     h1Upper: h1.bb && h1.bb.upper, h1Lower: h1.bb && h1.bb.lower, h1RejectUpper
   };
 }
@@ -170,19 +174,19 @@ function candleTrigger(map, align) {
 function renderTrigger(trig) {
   const hit = trig.find((x) => x.side);
   $("trigCard").className = "card " + (hit ? (hit.side === "long" ? "trig-long" : "trig-short") : "");
-  $("trigText").textContent = hit ? `${hit.side.toUpperCase()} · Setup ${hit.setup} · ${hit.label}` : "Chưa có nến tín hiệu";
+  $("trigText").textContent = hit ? `${hit.side.toUpperCase()} · Setup ${hit.setup} · ${hit.label}${hit.momentum ? " · Momentum (½ khối lượng)" : ""}` : "Chưa có nến tín hiệu";
   $("trigBody").innerHTML = trig.map((x) => {
     const time = new Date(x.t).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" });
-    const sig = x.side ? `<span class="tag ${x.side === "long" ? "tang" : "giam"}">${x.side.toUpperCase()} ${x.setup}</span>` : '<span class="tag in">—</span>';
+    const sig = x.side ? `<span class="tag ${x.side === "long" ? "tang" : "giam"}">${x.side.toUpperCase()} ${x.setup}${x.momentum ? " ·M" : ""}</span>` : '<span class="tag in">—</span>';
     return `<tr><td><b>${x.label}</b> ${time}</td><td>${fmt(x.o)} → ${fmt(x.c)}</td><td>${fmt(x.range)}${x.atrMult ? ` (${fmt(x.atrMult, 1)}×ATR)` : ""}</td><td>${x.volMult ? fmt(x.volMult, 1) + "×" : "—"}</td><td>${x.pos != null ? Math.round(x.pos * 100) + "%" : "—"}</td><td>${sig}</td><td class="muted">${x.side ? "Đủ điều kiện" : x.why.join(" · ") || "—"}</td></tr>`;
   }).join("");
 }
 // Ô Ưu tiên: kế hoạch lệnh của tín hiệu gần nhất (giữ 30 phút).
 function planText(x) {
-  const p = x.plan, acct = Number(store.get("solpha_acct", "0")), riskPct = Number(store.get("solpha_risk", "1"));
+  const p = x.plan, acct = Number(store.get("solpha_acct", "0")), riskPct = Number(store.get("solpha_risk", "1")) * (p.sizeFactor || 1);
   const riskUsd = acct * riskPct / 100, qty = riskUsd && p.risk ? riskUsd / p.risk : 0;
   return {
-    head: `${x.side === "long" ? "LONG" : "SHORT"} · Setup ${x.setup} · ${x.label}`,
+    head: `${x.side === "long" ? "LONG" : "SHORT"} · Setup ${x.setup} · ${x.label}${x.momentum ? " · Momentum ½" : ""}`,
     lines: [
       `Vào 3 phần: ${p.entries.map((e) => fmt(e)).join(" / ")} (TB ${fmt(p.entry)})`,
       `SL: ${fmt(p.sl)} (rủi ro ${fmt(p.risk)}/SOL)`,
@@ -379,7 +383,7 @@ async function fullScan(reason = "manual") {
       lastTriggerKey = key;
       store.set("solpha_last_trigger", key);
       const p = x.plan;
-      const msg = `${x.side.toUpperCase()} Setup ${x.setup} ${x.label} · vào ${fmt(p.entries[0])}/${fmt(p.entries[1])}/${fmt(p.entries[2])} · SL ${fmt(p.sl)} · TP1 ${fmt(p.tp1)} (1:${fmt(p.rr1, 1)}) · TP2 ${fmt(p.tp2)} (1:${fmt(p.rr2, 1)})`;
+      const msg = `${x.side.toUpperCase()} Setup ${x.setup} ${x.label}${x.momentum ? " (Momentum ½ size)" : ""} · vào ${fmt(p.entries[0])}/${fmt(p.entries[1])}/${fmt(p.entries[2])} · SL ${fmt(p.sl)} · TP1 ${fmt(p.tp1)} (1:${fmt(p.rr1, 1)}) · TP2 ${fmt(p.tp2)} (1:${fmt(p.rr2, 1)})`;
       addLog(msg, true);
       await notify("SOLPHA nến tín hiệu", msg);
     }
@@ -445,6 +449,7 @@ renderLogs(); schedulePrice(); scheduleHourly(); fullScan("boot");
   bind("chkSetupA", "solpha_setupA", "1", true);
   bind("chkSetupB", "solpha_setupB", "1", true);
   bind("chkSession", "solpha_session", "1", true);
+  bind("chkWalk", "solpha_walk", "1", true);
 })();
 // ---- Backtest: so bộ cũ ($0.55) với bộ mới (ATR + volume + Setup A/B) trên dữ liệu thật của Binance ----
 $("btnBacktest").addEventListener("click", async () => {
@@ -457,6 +462,7 @@ $("btnBacktest").addEventListener("click", async () => {
     const rows = [
       ["Bộ cũ ($0.55)", { ...base, rule: "fixed", sessionFilter: false }],
       ["Bộ mới (A + B)", { ...base, rule: "atr", setups: { A: true, B: true } }],
+      ["Bộ mới, chặn cứng 1H BB", { ...base, rule: "atr", setups: { A: true, B: true }, allowBandWalk: false }],
       ["Chỉ Setup A", { ...base, rule: "atr", setups: { A: true, B: false } }],
       ["Chỉ Setup B", { ...base, rule: "atr", setups: { A: false, B: true } }]
     ].map(([name, o]) => [name, SolphaSignals.backtest(closed(c5), closed(h1), closed(h4), closed(d1), o)]);
