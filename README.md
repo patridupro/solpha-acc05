@@ -39,9 +39,16 @@ Xem [`docs/PWA-DEPLOY-GUIDE.md`](docs/PWA-DEPLOY-GUIDE.md) (bản PDF: `docs/PWA
 - Kiểm tra bằng Chromium DevTools Protocol `Page.getInstallabilityErrors` → **0 lỗi**.
 
 ## Rule
-- Đồng pha = 1D + 4H + 1H cùng hướng, 15M không ngược mạnh.
+- Đồng pha = 1D + 4H + 1H cùng hướng EMA9/21 **và MACD(12,26,9) histogram cùng dấu** trên cả 3 khung, 15M không ngược mạnh. Nến tín hiệu Long/Short cũng yêu cầu điều kiện này.
 - Cảnh báo khi đồng pha và chạm BB trên ≥2 khung, có ≥1 khung ≥1H.
 - Nến tín hiệu (xét nến **đã đóng** 5M và 15M, quét ngay sau mỗi mốc 5 phút):
   - **Long**: range ≥ $0.55, close ≥ low + 0.75×range, 1D/4H/1H đều tăng, không chase BB trên (1H/4H/1D không chạm upper; nến tự chạm BB trên khung 5M/15M vẫn hợp lệ).
   - **Short**: range ≥ $0.55, close ≤ low + 0.25×range, 1D/4H/1H đều giảm, high chạm BB trên trong 3 nến gần nhất của khung đó hoặc 2 nến 1H gần nhất.
+
+## Nhật ký giao dịch & tổng kết tháng
+- Mỗi ngày chấm 5 tiêu chí (Đạt / Không / N/A), trọng số: **Kỷ luật theo chỉ báo 30 · Setup đúng 25 · Quản trị rủi ro 20 · Chia nhỏ lệnh 15 · Không FOMO/gỡ/chase 10**.
+- Điểm ngày = tổng trọng số Đạt ÷ tổng trọng số áp dụng (bỏ N/A). Hạng A ≥ 85 · B ≥ 70 · C ≥ 50 · D < 50. Ngày "Đứng ngoài" tự để N/A cho Setup/Rủi ro/Chia nhỏ — đứng ngoài đúng lúc vẫn đạt Kỷ luật.
+- Tổng kết tháng: số ngày đạt từng tiêu chí, điểm TB, số ngày hạng A, chuỗi kỷ luật dài nhất, tổng PnL, checklist từng ngày. Xuất CSV, sao lưu/khôi phục JSON.
+- Dữ liệu lưu trên máy (localStorage) — sao lưu định kỳ.
+
 - Không phải tư vấn tài chính. Tự quản size/leverage.

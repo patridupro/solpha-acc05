@@ -52,7 +52,7 @@
       <article class="card status" id="alignCard">
         <h2>Đồng pha</h2>
         <p id="alignText" class="big">Đang quét…</p>
-        <p id="alignDetail" class="muted">Cần 1D + 4H + 1H cùng hướng, 15M không ngược mạnh.</p>
+        <p id="alignDetail" class="muted">Cần 1D + 4H + 1H cùng hướng (EMA + MACD), 15M không ngược mạnh.</p>
       </article>
       <article class="card status" id="alertCard">
         <h2>Cảnh báo BB</h2>
@@ -88,7 +88,7 @@
         <table>
           <thead>
             <tr>
-              <th>Khung</th><th>Hướng</th><th>RSI14</th><th>EMA9/21</th>
+              <th>Khung</th><th>Hướng</th><th>RSI14</th><th>EMA9/21</th><th>MACD hist</th>
               <th>BB Upper</th><th>BB Mid</th><th>BB Lower</th><th>%B</th><th>Band</th>
             </tr>
           </thead>
@@ -114,7 +114,7 @@
       <article class="card">
         <h2>Rule cố định</h2>
         <ol class="rules">
-          <li>Đồng pha = 1D + 4H + 1H cùng hướng, 15M không ngược mạnh. 5M chỉ timing.</li>
+          <li>Đồng pha = 1D + 4H + 1H cùng hướng EMA9/21 <b>và MACD(12,26,9) histogram cùng dấu</b> trên cả 3 khung, 15M không ngược mạnh. 5M chỉ timing.</li>
           <li>Cảnh báo chỉ khi đồng pha VÀ chạm BB trên ≥2 khung, trong đó có ≥1 khung 1H/4H/1D.</li>
           <li>Long thuận trend: ưu tiên chạm lower. Không chase upper weekly/daily.</li>
           <li>Short chỉ khi HTF đã bear. SL/TP viết tới 2 số thập phân.</li>
@@ -134,8 +134,62 @@
         </div>
       </article>
     </section>
+    <section class="card" id="journalCard">
+      <div class="section-head">
+        <h2>Nhật ký giao dịch hằng ngày</h2>
+        <span class="pill" id="jLive">Điểm: —</span>
+      </div>
+      <div class="jtop">
+        <label>Ngày <input type="date" id="jDate" /></label>
+        <label>Chế độ
+          <select id="jMode">
+            <option value="trade">Có vào lệnh</option>
+            <option value="idle">Đứng ngoài (không vào lệnh)</option>
+          </select>
+        </label>
+        <label>Số lệnh <input type="number" id="jTrades" min="0" step="1" inputmode="numeric" placeholder="0" /></label>
+        <label>PnL ($ hoặc R) <input type="number" id="jPnl" step="0.01" inputmode="decimal" placeholder="vd 12.5 / -1" /></label>
+      </div>
+      <div id="jCriteria"></div>
+      <label class="jnote">Bài học / ghi chú
+        <textarea id="jNote" rows="2" placeholder="Vì sao vào/không vào? Làm đúng/sai điều gì?"></textarea>
+      </label>
+      <p id="jSignals" class="muted jsig"></p>
+      <div class="jactions">
+        <button id="jSave" class="btn primary">Lưu nhật ký</button>
+        <span id="jSaved" class="muted"></span>
+      </div>
+      <p class="muted jweights">Trọng số: Kỷ luật 30 · Setup 25 · Rủi ro 20 · Chia nhỏ lệnh 15 · Tâm lý 10. Điểm = tổng trọng số Đạt ÷ tổng trọng số áp dụng (bỏ N/A). Hạng A ≥ 85 · B ≥ 70 · C ≥ 50 · D &lt; 50. Đứng ngoài đúng lúc vẫn được điểm Kỷ luật.</p>
+    </section>
+    <section class="card" id="monthCard">
+      <div class="section-head">
+        <h2>Tổng kết tháng</h2>
+        <input type="month" id="jMonth" />
+      </div>
+      <div id="jStats" class="meta-grid jstats"></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Tiêu chí</th><th>Trọng số</th><th>Số ngày đạt</th><th>Tỷ lệ</th></tr></thead>
+          <tbody id="jCritBody"></tbody>
+        </table>
+      </div>
+      <h3 class="jh3">Checklist từng ngày <span class="muted">(Kỷ luật · Setup · Rủi ro · Chia nhỏ · Tâm lý — chạm để sửa)</span></h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Ngày</th><th>Lệnh</th><th>Checklist</th><th>Điểm</th><th>PnL</th><th>Ghi chú</th></tr></thead>
+          <tbody id="jDays"></tbody>
+        </table>
+      </div>
+      <div class="jactions">
+        <button id="jCsv" class="btn ghost">Xuất CSV tháng</button>
+        <button id="jBackup" class="btn ghost">Sao lưu (JSON)</button>
+        <label class="btn ghost">Khôi phục<input type="file" id="jImport" accept="application/json,.json" hidden /></label>
+      </div>
+      <p class="muted">Dữ liệu chỉ nằm trên máy này. Nên bấm Sao lưu cuối mỗi tuần và cất file vào Google Drive.</p>
+    </section>
   </main>
   <footer>SOLPHA Desk · dữ liệu Binance public API · không phải tư vấn tài chính</footer>
   <script src="app.js"></script>
+  <script src="journal.js"></script>
 </body>
 </html>

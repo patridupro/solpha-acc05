@@ -40,6 +40,25 @@ function rsi(values, period = 14) {
   if (avgL === 0) return 100;
   return 100 - 100 / (1 + avgG / avgL);
 }
+// MACD(12,26,9): hướng theo histogram (MACD − Signal) > 0 = tăng, < 0 = giảm.
+function emaSeries(values, period) {
+  if (values.length < period) return [];
+  const k = 2 / (period + 1);
+  const out = new Array(period - 1).fill(null);
+  let e = values.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  out.push(e);
+  for (let i = period; i < values.length; i++) { e = values[i] * k + e * (1 - k); out.push(e); }
+  return out;
+}
+function macd(values, fast = 12, slow = 26, signal = 9) {
+  if (values.length < slow + signal) return null;
+  const ef = emaSeries(values, fast), es = emaSeries(values, slow);
+  const line = values.map((_, i) => (ef[i] != null && es[i] != null ? ef[i] - es[i] : null)).filter((x) => x != null);
+  const sig = emaSeries(line, signal);
+  const m = line[line.length - 1], s = sig[sig.length - 1];
+  const hist = m - s;
+  return { macd: m, signal: s, hist, dir: hist > 0 ? "tang" : hist < 0 ? "giam" : "sideway" };
+}
 function bollinger(values, period = 20, mult = 2) {
   if (values.length < period) return null;
   const slice = values.slice(-period);
@@ -108,6 +127,7 @@ function analyze(candles) {
   const e21 = ema(closes, 21);
   const r = rsi(closes, 14);
   const bb = bollinger(closes, 20, 2);
+  const md = macd(closes);
   let dir = "sideway";
   if (e9 != null && e21 != null) {
     if (e9 > e21 && last >= e9) dir = "tang";
@@ -120,12 +140,12 @@ function analyze(candles) {
     if (bb.pctB >= 0.95 || last >= bb.upper) band = "upper";
     else if (bb.pctB <= 0.05 || last <= bb.lower) band = "lower";
   }
-  return { last, e9, e21, rsi: r, bb, dir, band, candles };
+  return { last, e9, e21, rsi: r, bb, dir, band, candles, macd: md };
 }
 // Nến tín hiệu: xét nến ĐÃ ĐÓNG gần nhất (bỏ nến đang chạy) trên 5M và 15M.
 function candleTrigger(map, align) {
-  const htfUp = align.d1 === "tang" && align.h4 === "tang" && align.h1 === "tang";
-  const htfDown = align.d1 === "giam" && align.h4 === "giam" && align.h1 === "giam";
+  const htfUp = align.d1 === "tang" && align.h4 === "tang" && align.h1 === "tang" && align.macdAligned;
+  const htfDown = align.d1 === "giam" && align.h4 === "giam" && align.h1 === "giam" && align.macdAligned;
   const htfAtUpper = ["1h", "4h", "1d"].filter((k) => map[k].band === "upper");
   const touchedUpper = (candles, lookback) => {
     const closes = candles.map((c) => c.c);
@@ -152,9 +172,9 @@ function candleTrigger(map, align) {
     const why = [];
     if (!big) why.push(`range ${fmt(range)} < ${TRIGGER.minRange}`);
     else if (!closeTop && !closeBottom) why.push(`đóng giữa nến (${Math.round(pos * 100)}%)`);
-    if (big && closeTop && !htfUp) why.push("1D/4H/1H chưa cùng tăng");
+    if (big && closeTop && !htfUp) why.push("1D/4H/1H (EMA+MACD) chưa cùng tăng");
     if (big && closeTop && htfUp && chasing) why.push("đang chase BB trên" + (htfAtUpper.length ? " (" + htfAtUpper.map((x) => x.toUpperCase()).join(",") + ")" : ""));
-    if (big && closeBottom && !htfDown) why.push("1D/4H/1H chưa cùng giảm");
+    if (big && closeBottom && !htfDown) why.push("1D/4H/1H (EMA+MACD) chưa cùng giảm");
     if (big && closeBottom && htfDown && !rejected) why.push("chưa chạm/từ chối BB trên");
     return { key, label: key.toUpperCase(), t: k.t, o: k.o, h: k.h, l: k.l, c: k.c, range, pos, long, short, why };
   });
@@ -174,8 +194,12 @@ function alignment(map) {
   const d1 = map["1d"].dir, h4 = map["4h"].dir, h1 = map["1h"].dir, m15 = map["15m"].dir;
   const sameHTF = d1 === h4 && h4 === h1 && d1 !== "sideway";
   const m15Opp = (d1 === "tang" && m15 === "giam") || (d1 === "giam" && m15 === "tang");
-  const aligned = sameHTF && !m15Opp;
-  return { aligned, dir: aligned ? d1 : null, sameHTF, m15Opp, d1, h4, h1, m15 };
+  // MACD 1D/4H/1H phải cùng hướng với xu hướng EMA.
+  const md = (k) => (map[k].macd ? map[k].macd.dir : "sideway");
+  const macdD1 = md("1d"), macdH4 = md("4h"), macdH1 = md("1h");
+  const macdAligned = sameHTF && macdD1 === d1 && macdH4 === d1 && macdH1 === d1;
+  const aligned = sameHTF && !m15Opp && macdAligned;
+  return { aligned, dir: aligned ? d1 : null, sameHTF, m15Opp, macdAligned, macdD1, macdH4, macdH1, d1, h4, h1, m15 };
 }
 function bandHits(map) {
   const hits = TFS.filter((tf) => map[tf.key].band === "upper" || map[tf.key].band === "lower")
@@ -188,9 +212,10 @@ function buildOrder(price, map, align, bands) {
     return [
       "KHÔNG CẢNH BÁO — chưa đồng pha / chưa chạm BB đủ điều kiện.",
       `1D ${align.d1.toUpperCase()} · 4H ${align.h4.toUpperCase()} · 1H ${align.h1.toUpperCase()} · 15M ${align.m15.toUpperCase()}`,
+      `MACD hist: 1D ${align.macdD1} · 4H ${align.macdH4} · 1H ${align.macdH1}${align.macdAligned ? " (đồng pha)" : " (chưa đồng pha)"}`,
       `Giá hiện tại: ${fmt(price)}`,
       "Ưu tiên: WAIT. Không chase, không đoán.",
-      "App sẽ tự viết lệnh khi 1D+4H+1H cùng hướng và ≥2 khung chạm band (có khung ≥1H)."
+      "App sẽ tự viết lệnh khi 1D+4H+1H cùng hướng (EMA + MACD) và ≥2 khung chạm band (có khung ≥1H)."
     ].join("\n");
   }
   const bb4 = map["4h"].bb;
@@ -244,14 +269,15 @@ function renderTable(map) {
     const a = map[tf.key];
     const emaTxt = a.e9 && a.e21 ? `${fmt(a.e9)} / ${fmt(a.e21)}` : "—";
     const bandLabel = a.band === "upper" ? "CHẠM UPPER" : a.band === "lower" ? "CHẠM LOWER" : "Trong band";
-    return `<tr><td><b>${tf.label}</b></td><td><span class="tag ${a.dir}">${a.dir.toUpperCase()}</span></td><td>${fmt(a.rsi, 1)}</td><td>${emaTxt}</td><td>${a.bb ? fmt(a.bb.upper) : "—"}</td><td>${a.bb ? fmt(a.bb.mid) : "—"}</td><td>${a.bb ? fmt(a.bb.lower) : "—"}</td><td>${a.bb ? fmt(a.bb.pctB, 2) : "—"}</td><td><span class="tag ${a.band}">${bandLabel}</span></td></tr>`;
+    return `<tr><td><b>${tf.label}</b></td><td><span class="tag ${a.dir}">${a.dir.toUpperCase()}</span></td><td>${fmt(a.rsi, 1)}</td><td>${emaTxt}</td><td>${a.macd ? `<span class="tag ${a.macd.dir}">${fmt(a.macd.hist, 3)}</span>` : "—"}</td><td>${a.bb ? fmt(a.bb.upper) : "—"}</td><td>${a.bb ? fmt(a.bb.mid) : "—"}</td><td>${a.bb ? fmt(a.bb.lower) : "—"}</td><td>${a.bb ? fmt(a.bb.pctB, 2) : "—"}</td><td><span class="tag ${a.band}">${bandLabel}</span></td></tr>`;
   }).join("");
 }
 function setStatus(align, bands) {
   const ac = $("alignCard"); const al = $("alertCard");
   ac.className = "card status " + (align.aligned ? "ok" : "warn");
   $("alignText").textContent = align.aligned ? `ĐỒNG PHA ${align.dir.toUpperCase()}` : "CHƯA ĐỒNG PHA";
-  $("alignDetail").textContent = `1D ${align.d1} · 4H ${align.h4} · 1H ${align.h1} · 15M ${align.m15}${align.m15Opp ? " (15M ngược)" : ""}`;
+  const mTxt = (m) => (m === "tang" ? "↑" : m === "giam" ? "↓" : "–");
+  $("alignDetail").textContent = `EMA: 1D ${align.d1} · 4H ${align.h4} · 1H ${align.h1} · 15M ${align.m15}${align.m15Opp ? " (15M ngược)" : ""} | MACD: 1D ${mTxt(align.macdD1)} 4H ${mTxt(align.macdH4)} 1H ${mTxt(align.macdH1)}${align.sameHTF && !align.macdAligned ? " (MACD lệch pha)" : ""}`;
   const fire = align.aligned && bands.ready;
   al.className = "card status " + (fire ? "bad" : "warn");
   $("alertText").textContent = fire ? "CẢNH BÁO" : "KHÔNG CẢNH BÁO";
