@@ -12,6 +12,7 @@ const store = {
 };
 let lastAlertKey = store.get("solpha_last_alert", "");
 let lastTriggerKey = store.get("solpha_last_trigger", "");
+let lastFunding = null;
 let deferredPrompt = null;
 let priceTimer = null;
 let hourTimer = null;
@@ -112,6 +113,7 @@ async function loadTicker() {
   try {
     const { data } = await withBase("/fapi/v1/premiumIndex?symbol=SOLUSDT", "/fapi/v1/premiumIndex?symbol=SOLUSDT");
     if (data && data.markPrice) $("markPrice").textContent = "$" + fmt(data.markPrice);
+    if (data && data.lastFundingRate != null) lastFunding = Number(data.lastFundingRate);
     if (data && data.lastFundingRate != null) $("funding").textContent = (Number(data.lastFundingRate) * 100).toFixed(4) + "%";
   } catch (_) {}
 }
@@ -147,7 +149,10 @@ function sigOptions() {
     rule: store.get("solpha_rule", "atr"),
     sessionFilter: store.get("solpha_session", "1") === "1",
     allowBandWalk: store.get("solpha_walk", "1") === "1",
-    setups: { A: store.get("solpha_setupA", "1") === "1", B: store.get("solpha_setupB", "1") === "1" }
+    setups: {
+      A: store.get("solpha_setupA", "1") === "1", B: store.get("solpha_setupB", "1") === "1",
+      S1: store.get("solpha_setupS1", "1") === "1", S2: store.get("solpha_setupS2", "1") === "1", S3: store.get("solpha_setupS3", "1") === "1"
+    }
   };
 }
 function htfContext(map, align) {
@@ -161,7 +166,10 @@ function htfContext(map, align) {
     chaseDown: ["1h", "4h", "1d"].filter((k) => map[k].band === "lower").map((k) => k.toUpperCase()),
     walkLong: SolphaSignals.bandWalk(P1, h1.candles.length - 2, "long", { ...SolphaSignals.DEFAULTS, ...sigOptions() }),
     walkShort: SolphaSignals.bandWalk(P1, h1.candles.length - 2, "short", { ...SolphaSignals.DEFAULTS, ...sigOptions() }),
-    h1Upper: h1.bb && h1.bb.upper, h1Lower: h1.bb && h1.bb.lower, h1RejectUpper
+    h1Upper: h1.bb && h1.bb.upper, h1Lower: h1.bb && h1.bb.lower, h1RejectUpper,
+    m15Down: align.m15 === "giam",
+    h1Close: h1.candles[h1.candles.length - 2].c, h1Ema21: P1.ema21[h1.candles.length - 2], h1Rsi: P1.rsi[h1.candles.length - 2],
+    funding: lastFunding
   };
 }
 function candleTrigger(map, align) {
@@ -186,14 +194,15 @@ function planText(x) {
   const p = x.plan, acct = Number(store.get("solpha_acct", "0")), riskPct = Number(store.get("solpha_risk", "1")) * (p.sizeFactor || 1);
   const riskUsd = acct * riskPct / 100, qty = riskUsd && p.risk ? riskUsd / p.risk : 0;
   return {
-    head: `${x.side === "long" ? "LONG" : "SHORT"} · Setup ${x.setup} · ${x.label}${x.momentum ? " · Momentum ½" : ""}`,
+    head: `${x.side === "long" ? "LONG" : "SHORT"} · Setup ${x.setup} · ${x.label}${(p.sizeFactor || 1) < 1 ? " · ½ khối lượng" : ""}`,
     lines: [
       `Vào 3 phần: ${p.entries.map((e) => fmt(e)).join(" / ")} (TB ${fmt(p.entry)})`,
       `SL: ${fmt(p.sl)} (rủi ro ${fmt(p.risk)}/SOL)`,
-      `TP1: ${fmt(p.tp1)} (R:R 1:${fmt(p.rr1, 1)}) → dời SL về giá vào`,
+      `TP1: ${fmt(p.tp1)} (R:R 1:${fmt(p.rr1, 1)}) → ${p.partialTP1 ? "chốt ½, " : ""}dời SL về giá vào`,
       `TP2: ${fmt(p.tp2)} (R:R 1:${fmt(p.rr2, 1)})`,
       qty ? `Khối lượng: ${fmt(qty, 2)} SOL ≈ $${fmt(qty * p.entry, 0)} · đòn bẩy ≈ ${fmt(qty * p.entry / acct, 1)}x (rủi ro $${fmt(riskUsd, 0)} = ${riskPct}% vốn), mỗi phần ${fmt(qty / 3, 2)} SOL`
-          : "Nhập vốn ở mục Cài đặt để app tính khối lượng."
+          : "Nhập vốn ở mục Cài đặt để app tính khối lượng.",
+      ...(p.timeStopBars ? [`Giới hạn thời gian: chưa chạm TP1 sau ${Math.round(p.timeStopBars * 5 / 60 * 10) / 10} giờ → thoát lệnh`] : [])
     ]
   };
 }
@@ -450,27 +459,35 @@ renderLogs(); schedulePrice(); scheduleHourly(); fullScan("boot");
   bind("chkSetupB", "solpha_setupB", "1", true);
   bind("chkSession", "solpha_session", "1", true);
   bind("chkWalk", "solpha_walk", "1", true);
+  bind("chkSetupS1", "solpha_setupS1", "1", true);
+  bind("chkSetupS2", "solpha_setupS2", "1", true);
+  bind("chkSetupS3", "solpha_setupS3", "1", true);
 })();
 // ---- Backtest: so bộ cũ ($0.55) với bộ mới (ATR + volume + Setup A/B) trên dữ liệu thật của Binance ----
 $("btnBacktest").addEventListener("click", async () => {
   const btn = $("btnBacktest"), out = $("btBox");
   btn.disabled = true; out.innerHTML = "Đang tải ~1.500 nến 5M và khung lớn từ Binance…";
   try {
-    const [c5, h1, h4, d1] = await Promise.all([loadKlines("5m", 1500), loadKlines("1h", 400), loadKlines("4h", 300), loadKlines("1d", 200)]);
+    const [c5, h1, h4, d1, m15] = await Promise.all([loadKlines("5m", 1500), loadKlines("1h", 400), loadKlines("4h", 300), loadKlines("1d", 200), loadKlines("15m", 700)]);
     const closed = (a) => a.slice(0, -1);
     const base = sigOptions();
     const rows = [
-      ["Bộ cũ ($0.55)", { ...base, rule: "fixed", sessionFilter: false }],
-      ["Bộ mới (A + B)", { ...base, rule: "atr", setups: { A: true, B: true } }],
-      ["Bộ mới, chặn cứng 1H BB", { ...base, rule: "atr", setups: { A: true, B: true }, allowBandWalk: false }],
-      ["Chỉ Setup A", { ...base, rule: "atr", setups: { A: true, B: false } }],
-      ["Chỉ Setup B", { ...base, rule: "atr", setups: { A: false, B: true } }]
-    ].map(([name, o]) => [name, SolphaSignals.backtest(closed(c5), closed(h1), closed(h4), closed(d1), o)]);
+      ["Bộ cũ ($0.55) · 2 chiều", { ...base, rule: "fixed", sessionFilter: false }],
+      ["LONG A + B", { ...base, rule: "atr", only: "long" }],
+      ["LONG chỉ A", { ...base, rule: "atr", only: "long", setups: { A: true, B: false } }],
+      ["LONG chỉ B", { ...base, rule: "atr", only: "long", setups: { A: false, B: true } }],
+      ["LONG chặn cứng 1H BB", { ...base, rule: "atr", only: "long", allowBandWalk: false }],
+      ["SHORT S1 + S2 + S3", { ...base, rule: "atr", only: "short", setups: { S1: true, S2: true, S3: true } }],
+      ["SHORT chỉ S1 (hồi bị từ chối)", { ...base, rule: "atr", only: "short", setups: { S1: true, S2: false, S3: false } }],
+      ["SHORT chỉ S2 (thủng đáy)", { ...base, rule: "atr", only: "short", setups: { S1: false, S2: true, S3: false } }],
+      ["SHORT chỉ S3 (1H BB trên thất bại)", { ...base, rule: "atr", only: "short", setups: { S1: false, S2: false, S3: true } }]
+    ].map(([name, o]) => [name, SolphaSignals.backtest(closed(c5), closed(h1), closed(h4), closed(d1), o, 5, closed(m15))]);
     const r0 = rows[0][1];
     const day = (t) => new Date(t).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
-    out.innerHTML = `<div class="muted">Từ ${day(r0.from)} đến ${day(r0.to)} · vào ở giá đóng nến, SL = đáy/đỉnh nến ∓ 0.5 ATR, chốt ở 1.5R, tối đa 4 giờ. Nến chạm cả SL và TP tính là thua.</div>
+    out.innerHTML = `<div class="muted">Từ ${day(r0.from)} đến ${day(r0.to)} · vào ở giá đóng nến, chốt ở 1.5R; Long tối đa 4 giờ, Short tối đa 2 giờ. Nến chạm cả SL và TP tính là thua. Backtest Short bỏ qua bộ lọc funding (không có dữ liệu lịch sử).</div>
       <div class="table-wrap"><table><thead><tr><th>Bộ điều kiện</th><th>Số lệnh</th><th>Thắng</th><th>R TB/lệnh</th><th>Tổng R</th><th>Sụt tối đa</th></tr></thead><tbody>${rows.map(([n, r]) =>
         `<tr><td><b>${n}</b></td><td>${r.n}</td><td>${r.n ? Math.round(r.winRate * 100) + "%" : "—"}</td><td class="${r.avgR >= 0 ? "up" : "down"}">${r.n ? (r.avgR >= 0 ? "+" : "") + fmt(r.avgR) : "—"}</td><td class="${r.totalR >= 0 ? "up" : "down"}">${(r.totalR >= 0 ? "+" : "") + fmt(r.totalR, 1)}R</td><td>${fmt(r.maxDD, 1)}R</td></tr>`).join("")}</tbody></table></div>
+      ${[["LONG", rows[1][1]], ["SHORT", rows[5][1]]].map(([n, r]) => r.topWhy && r.topWhy.length ? `<div class="muted"><b>${n}</b> bị loại nhiều nhất vì: ${r.topWhy.slice(0, 3).map(([w, c]) => `${w.replace(/#/g, "x")} (${c})`).join(" · ")}</div>` : "").join("")}
       <div class="muted">Khoảng 5 ngày là mẫu nhỏ — chạy lại mỗi tuần và chỉ tin khi xu hướng lặp lại. Chưa tính phí giao dịch và trượt giá.</div>`;
   } catch (e) { out.textContent = "Lỗi backtest: " + (e.message || e); }
   btn.disabled = false;

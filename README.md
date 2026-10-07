@@ -49,6 +49,11 @@ Xem [`docs/PWA-DEPLOY-GUIDE.md`](docs/PWA-DEPLOY-GUIDE.md) (bản PDF: `docs/PWA
   - **Setup B** (bứt phá sau nén): độ rộng BB nến trước ≤ phân vị 20% của 100 nến, nến đóng vượt BB trên (thủng BB dưới); cách EMA21 ≤ 2.5 ATR.
   - Tránh giờ funding (07/15/23h VN ±10′), tin Mỹ (19:30/20:30 VN ±15′), 03–06h VN.
   - Kế hoạch: vào 3 phần (giá đóng / hồi 50% nến / BB mid), SL = đáy (đỉnh) nến ∓ 0.5 ATR, bỏ lệnh nếu rủi ro > 2 ATR, TP1 = 1.5R (dời SL về giá vào), TP2 = 3R hoặc BB 1H nếu cản gần hơn. Khối lượng = vốn × % rủi ro ÷ (giá vào TB − SL).
+  - **Short — bộ riêng** (crypto giảm nhanh, hồi nông nên không đối xứng với Long): 1D/4H/1H giảm + **15M giảm** + giá dưới EMA21 1H; nến ≥ 1.2×ATR đóng ở 25% dưới.
+    - **S3** (1H vừa chạm BB trên rồi thất bại) → **S1** (6 nến trước đã hồi chạm EMA21/BB mid, nến đóng dưới EMA21, volume ≥ 1.3×, RSI 5M ≥ 25) → **S2** (đóng dưới đáy 12 nến, ≥ 1.3×ATR, volume ≥ 1.5×, RSI 5M ≥ 20, **½ khối lượng**). App thử theo thứ tự này và lấy setup đầu tiên có rủi ro hợp lệ.
+    - Không Short khi: funding ≤ −0.03%/8h, RSI 1H < 25, vừa có nến > 3×ATR (so với ATR trước nến đó), 4H/1D ở BB dưới; 1H ở BB dưới chỉ cho khi đang bám dải (½ khối lượng).
+    - SL = đỉnh nhịp hồi + 0.3 ATR (S2: đỉnh nến + 0.3 ATR), bỏ nếu rủi ro > 2.5 ATR. TP1 = 1.5R **chốt ½** + dời SL về giá vào, TP2 = 3R hoặc BB dưới 1H. **Quá 2 giờ chưa TP1 thì thoát.**
+  - Backtest tách Long/Short và từng setup, kèm "lý do bị loại nhiều nhất". Backtest Short bỏ qua bộ lọc funding (Binance không trả funding lịch sử theo nến).
   - Bộ cũ (range ≥ $0.55) vẫn chọn được trong Cài đặt. Nút **Backtest** so 4 bộ trên ~1.500 nến 5M thật (vào ở giá đóng, chốt 1.5R, tối đa 4 giờ, nến chạm cả SL/TP tính thua, chưa tính phí).
 
 ## Nhật ký giao dịch & tổng kết tháng

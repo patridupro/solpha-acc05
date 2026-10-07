@@ -17,7 +17,10 @@
     sessionFilter: true,
     allowBandWalk: true,     // 1H chạm BB trên/dưới vẫn cho vào nếu đang "bám dải" (bứt phá thật)
     walkRsiMax: 75, walkRsiMin: 25, walkMaxExtATR: 0.5, walkSize: 0.5,
-    setups: { A: true, B: true }
+    setups: { A: true, B: true, S1: true, S2: true, S3: true },
+    // Short (crypto giảm nhanh, hồi nông → bộ riêng, không đối xứng với Long)
+    sMinATR: 1.2, sVol: 1.3, s2MinATR: 1.3, s2Vol: 1.5, s2Lookback: 12, sBounceLookback: 6,
+    sSlATR: 0.3, sMaxRiskATR: 2.5, s2RsiMin: 20, sCrashATR: 3, sH1RsiMin: 25, fundingMin: -0.0003, sTimeStopBars: 24
   };
 
   const sma = (a) => a.reduce((s, x) => s + x, 0) / a.length;
@@ -101,6 +104,7 @@
     const closeTop = pos >= 1 - o.closeZone, closeBottom = pos <= o.closeZone;
     const dir = closeTop ? "long" : closeBottom ? "short" : null;
 
+    if (o.rule !== "fixed" && closeBottom) return evaluateShort(P, i, htf, tfMinutes, o, res);
     // 1) Độ lớn nến
     if (o.rule === "fixed") { if (range < o.fixedRange) res.why.push(`range ${range.toFixed(2)} < ${o.fixedRange}`); }
     else if (res.atrMult < o.atrMin) res.why.push(`range ${res.atrMult.toFixed(1)}×ATR < ${o.atrMin}`);
@@ -174,8 +178,67 @@
     return res;
   }
 
+  // ---- SHORT: 1D/4H/1H giảm (xu hướng) + 15M giảm (đà) + 5M hồi lên rồi bị đạp xuống (điểm vào) ----
+  // S3: 1H vừa chạm BB trên rồi thất bại · S1: hồi chạm EMA21/BB mid bị từ chối · S2: thủng đáy 12 nến (½ khối lượng).
+  function evaluateShort(P, i, htf, tfMinutes, o, res) {
+    const k = P.candles[i], atr = P.atr[i], bb = P.bb[i], e21 = P.ema21[i], rsi = P.rsi[i];
+    const no = (w) => { res.why.push(w); return res; };
+    if (res.atrMult > o.atrMax) return no(`nến quá lớn ${res.atrMult.toFixed(1)}×ATR (tin/thanh lý)`);
+    if (res.atrMult < o.sMinATR) return no(`range ${res.atrMult.toFixed(1)}×ATR < ${o.sMinATR}`);
+    // Xu hướng & đà
+    if (!htf.down) return no("1D/4H/1H chưa cùng giảm");
+    if (htf.m15Down === false) return no("15M chưa giảm");
+    if (htf.h1Close != null && htf.h1Ema21 != null && htf.h1Close >= htf.h1Ema21) return no("giá 1H còn trên EMA21");
+    // Bộ lọc riêng của Short
+    if (htf.funding != null && htf.funding <= o.fundingMin) return no(`funding ${(htf.funding * 100).toFixed(3)}% quá âm (dễ bị ép short)`);
+    if (htf.h1Rsi != null && htf.h1Rsi < o.sH1RsiMin) return no(`RSI 1H ${htf.h1Rsi.toFixed(0)} < ${o.sH1RsiMin} (quá bán)`);
+    for (let j = i - 3; j < i; j++) { const x = P.candles[j], a = P.atr[j - 1]; if (a && x.h - x.l > o.sCrashATR * a) return no("vừa có cú sập lớn, chờ hồi"); } // so với ATR trước nến sập
+    const chase = htf.chaseDown || [];
+    if (chase.some((x) => x !== "1H")) return no(`đang chase BB dưới (${chase.join(",")})`);
+    const h1AtLower = chase.includes("1H");
+    if (h1AtLower && !(o.allowBandWalk && htf.walkShort && htf.walkShort.ok)) return no(`1H ở BB dưới nhưng quá đà${htf.walkShort ? ": " + htf.walkShort.why : ""}`);
+    // Nhịp hồi trong 6 nến trước nến tín hiệu
+    const prev = P.candles.slice(i - o.sBounceLookback, i);
+    const bounceHigh = Math.max(...prev.map((x) => x.h), k.h);
+    const touched = prev.some((x, j) => { const n = i - o.sBounceLookback + j; return x.h >= Math.min(P.ema21[n], P.bb[n].mid); });
+    const prior12Low = Math.min(...P.candles.slice(i - o.s2Lookback, i).map((x) => x.l));
+    // Ứng viên theo thứ tự ưu tiên S3 → S1 → S2; lấy setup đầu tiên có rủi ro hợp lệ (S1/S3 SL trên đỉnh hồi có thể quá xa trong khi S2 vẫn hợp lệ).
+    const rsiOk = rsi >= o.rsiMin, rsi2Ok = rsi >= o.s2RsiMin; // S1/S3 vào sau nhịp hồi: RSI ≥ 25; S2 thủng đáy: ≥ 20
+    const cands = [];
+    if (o.setups.S3 && htf.h1RejectUpper && res.volMult >= o.sVol && k.c < e21 && rsiOk) cands.push(["S3", bounceHigh + o.sSlATR * atr]);
+    if (o.setups.S1 && touched && k.c < e21 && res.volMult >= o.sVol && rsiOk) cands.push(["S1", bounceHigh + o.sSlATR * atr]);
+    if (o.setups.S2 && k.c < prior12Low && res.atrMult >= o.s2MinATR && res.volMult >= o.s2Vol && rsi2Ok) cands.push(["S2", k.h + o.sSlATR * atr]);
+    if (!cands.length) {
+      if (!rsi2Ok || (!rsiOk && !(k.c < prior12Low))) return no(`RSI ${rsi.toFixed(0)} quá thấp`);
+      if (res.volMult < o.sVol) return no(`volume ${res.volMult.toFixed(1)}× < ${o.sVol}×`);
+      return no(touched ? "chưa đóng dưới EMA21" : "chưa có nhịp hồi chạm EMA21/BB mid, chưa thủng đáy 12 nến");
+    }
+    if (o.sessionFilter) { const s = sessionBlock(k.t + tfMinutes * 60000); if (s) return no(s); }
+    if (h1AtLower) res.momentum = true;
+    // Vào 3 phần: giá đóng / hồi 1/3 nến / EMA21 (hoặc +0.25 ATR nếu EMA21 xa hay ở dưới)
+    const e1 = k.c, e2 = k.c + res.range / 3;
+    let lastRisk = null;
+    for (const [setup, sl] of cands) {
+      let e3 = e21;
+      if (e3 <= e2 || e3 - e2 > atr) e3 = e2 + 0.25 * atr;
+      if (e3 >= sl) e3 = (e2 + sl) / 2;
+      const entry = (e1 + e2 + e3) / 3, risk = sl - entry;
+      if (risk <= 0 || risk > o.sMaxRiskATR * atr) { lastRisk = risk / atr; continue; }
+      const tp1 = entry - o.tp1R * risk;
+      let tp2 = entry - o.tp2R * risk;
+      if (htf.h1Lower && htf.h1Lower < tp1 && htf.h1Lower > tp2) tp2 = htf.h1Lower;
+      res.setup = setup;
+      res.side = "short";
+      res.plan = { entries: [e1, e2, e3], entry, sl, tp1, tp2, risk, rr1: o.tp1R, rr2: (entry - tp2) / risk, slFromClose: sl - e1,
+        sizeFactor: setup === "S2" || res.momentum ? o.walkSize : 1, timeStopBars: o.sTimeStopBars, partialTP1: 0.5 };
+      return res;
+    }
+    return no(`SL quá xa (${lastRisk.toFixed(1)}×ATR)`);
+    return res;
+  }
+
   // Kết quả lệnh sau tín hiệu: vào ở giá đóng, SL như kế hoạch nhưng tính từ giá đóng, TP = tp1R × rủi ro. Nến chạm cả 2 → tính SL (thận trọng).
-  function outcome(candles, i, sig, tp1R, maxBars = 48) {
+  function outcome(candles, i, sig, tp1R, maxBars = (sig.plan && sig.plan.timeStopBars) || 48) {
     const sgn = sig.side === "long" ? 1 : -1, entry = sig.c, sl = sig.plan.sl, risk = Math.abs(entry - sl), tp = entry + sgn * tp1R * risk;
     for (let j = i + 1; j < Math.min(candles.length, i + 1 + maxBars); j++) {
       const k = candles[j];
@@ -200,10 +263,10 @@
     };
   }
 
-  function backtest(c5, h1, h4, d1, opt, tfMinutes = 5) {
-    const P = prepare(c5), L1 = htfLookup(h1, 60), L4 = htfLookup(h4, 240), LD = htfLookup(d1, 1440);
+  function backtest(c5, h1, h4, d1, opt, tfMinutes = 5, m15 = null) {
+    const P = prepare(c5), L1 = htfLookup(h1, 60), L4 = htfLookup(h4, 240), LD = htfLookup(d1, 1440), L15 = m15 ? htfLookup(m15, 15) : null;
     const o = { ...DEFAULTS, ...opt };
-    const trades = [];
+    const trades = [], why = {};
     let busyUntil = -1;
     for (let i = 100; i < c5.length - 1; i++) {
       if (i <= busyUntil) continue; // không chồng lệnh
@@ -216,8 +279,18 @@
       let h1RejectUpper = false;
       for (let j = a.idx; j >= a.idx - 1; j--) if (a.P.bb[j] && a.P.candles[j].h >= a.P.bb[j].upper) h1RejectUpper = true;
       const htf = { up: a.dir === "tang" && b.dir === "tang" && d.dir === "tang", down: a.dir === "giam" && b.dir === "giam" && d.dir === "giam", chaseUp, chaseDown, walkLong, walkShort, h1Upper: a.bb && a.bb.upper, h1Lower: a.bb && a.bb.lower, h1RejectUpper };
+      const q = L15 && L15(tClose);
+      htf.m15Down = q ? q.dir === "giam" : undefined;
+      htf.h1Close = a.P.closes[a.idx]; htf.h1Ema21 = a.P.ema21[a.idx]; htf.h1Rsi = a.P.rsi[a.idx];
+      htf.funding = null; // Binance không trả funding lịch sử theo nến → backtest bỏ qua bộ lọc funding
       const sig = evaluate(P, i, htf, tfMinutes, o);
-      if (!sig.side) continue;
+      if (!sig.side) {
+        // Chỉ đếm nến có hướng phù hợp (Long: đóng nửa trên; Short: đóng nửa dưới) để biết điều kiện nào chặn nhiều nhất.
+        const side = sig.pos >= 0.5 ? "long" : "short";
+        if (sig.why[0] && (!o.only || o.only === side)) { const w = sig.why[0].replace(/[-\d.]+/g, "#"); why[w] = (why[w] || 0) + 1; }
+        continue;
+      }
+      if (o.only && sig.side !== o.only) continue;
       const out = outcome(c5, i, sig, o.tp1R);
       if (!out) continue;
       trades.push({ t: sig.t, side: sig.side, setup: sig.setup, ...out });
@@ -227,7 +300,8 @@
     let eq = 0, peak = 0, dd = 0;
     for (const x of trades) { eq += x.r; peak = Math.max(peak, eq); dd = Math.max(dd, peak - eq); }
     const total = trades.reduce((s, x) => s + x.r, 0);
-    return { n, wins, winRate: n ? wins / n : 0, avgR: n ? total / n : 0, totalR: total, maxDD: dd, trades,
+    const topWhy = Object.entries(why).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    return { n, wins, winRate: n ? wins / n : 0, avgR: n ? total / n : 0, totalR: total, maxDD: dd, trades, topWhy,
       from: c5[100] && c5[100].t, to: c5[c5.length - 1] && c5[c5.length - 1].t };
   }
 
