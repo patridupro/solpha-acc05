@@ -151,3 +151,5 @@ label.btn { display: inline-flex; align-items: center; font-size: 13px; font-wei
 td.up { color: var(--up); } td.down { color: var(--down); }
 .settings { display: grid; gap: 8px; }
 .settings input[type=number], .settings select { background: #0b0e15; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; max-width: 100%; }
+.trigwhy { font-size: 13px; color: var(--muted); margin: -4px 0 10px; line-height: 1.6; }
+.trigwhy b { color: var(--text); }
