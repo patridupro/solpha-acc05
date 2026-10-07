@@ -6,6 +6,10 @@ PWA theo dõi SOL/USDT futures đa khung (5M, 15M, 1H, 4H, 1D), RSI / EMA / Boll
 
 https://solpha.pages.dev — Cloudflare Pages build từ nhánh `claude/intelligent-lamport-vrk29w` của repo này (1 build mỗi lần push). Đường dẫn trong app đều tương đối nên vẫn chạy được nếu sau này chuyển sang GitHub Pages/Netlify.
 
+## Kiểm tra
+
+`node tests/signals.test.js` — kiểm tra tham số mặc định và các tình huống Short/Short điều chỉnh chính. Chạy trước mỗi lần push.
+
 ## Playbook cho app sau
 
 Xem [`docs/PWA-DEPLOY-GUIDE.md`](docs/PWA-DEPLOY-GUIDE.md) (bản PDF: `docs/PWA-DEPLOY-GUIDE.pdf`) · skill Claude: `skills/pwa-deploy/` · tạo icon: `node tools/make-icons.js`.
@@ -53,6 +57,7 @@ Xem [`docs/PWA-DEPLOY-GUIDE.md`](docs/PWA-DEPLOY-GUIDE.md) (bản PDF: `docs/PWA
     - **S3** (1H vừa chạm BB trên rồi thất bại) → **S1** (6 nến trước đã hồi chạm EMA21/BB mid, nến đóng dưới EMA21, volume ≥ 1.3×, RSI 5M ≥ 25) → **S2** (đóng dưới đáy 12 nến, ≥ 1.3×ATR, volume ≥ 1.5×, RSI 5M ≥ 20, **½ khối lượng**). App thử theo thứ tự này và lấy setup đầu tiên có rủi ro hợp lệ.
     - Không Short khi: funding ≤ −0.03%/8h, RSI 1H < 25, vừa có nến > 3×ATR (so với ATR trước nến đó), 4H/1D ở BB dưới; 1H ở BB dưới chỉ cho khi đang bám dải (½ khối lượng).
     - SL = đỉnh nhịp hồi + 0.3 ATR (S2: đỉnh nến + 0.3 ATR), bỏ nếu rủi ro > 2.5 ATR. TP1 = 1.5R **chốt ½** + dời SL về giá vào, TP2 = 3R hoặc BB dưới 1H. **Quá 2 giờ chưa TP1 thì thoát.**
+  - **Short điều chỉnh**: 1D còn tăng nhưng giá đóng dưới BB mid 1D, 4H/1H/15M giảm → chỉ S1/S3, **½ khối lượng**, TP2 không vượt BB dưới 1D (bỏ lệnh nếu TP1 đã vượt). Tắt được trong Cài đặt.
   - Backtest tách Long/Short và từng setup, kèm "lý do bị loại nhiều nhất". Backtest Short bỏ qua bộ lọc funding (Binance không trả funding lịch sử theo nến).
   - Bộ cũ (range ≥ $0.55) vẫn chọn được trong Cài đặt. Nút **Backtest** so 4 bộ trên ~1.500 nến 5M thật (vào ở giá đóng, chốt 1.5R, tối đa 4 giờ, nến chạm cả SL/TP tính thua, chưa tính phí).
 

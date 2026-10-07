@@ -20,7 +20,9 @@
     setups: { A: true, B: true, S1: true, S2: true, S3: true },
     // Short (crypto giảm nhanh, hồi nông → bộ riêng, không đối xứng với Long)
     sMinATR: 1.2, sVol: 1.3, s2MinATR: 1.3, s2Vol: 1.5, s2Lookback: 12, sBounceLookback: 6,
-    sSlATR: 0.3, sMaxRiskATR: 2.5, s2RsiMin: 20, sCrashATR: 3, sH1RsiMin: 25, fundingMin: -0.0003, sTimeStopBars: 24
+    sSlATR: 0.3, sMaxRiskATR: 2.5, s2RsiMin: 20,
+    sCrashATR: 3, sH1RsiMin: 25, fundingMin: -0.0003, sTimeStopBars: 24,
+    allowCorrective: true, shortRegime: "all" // shortRegime: "all" | "trend" | "corrective" (dùng cho backtest)
   };
 
   const sma = (a) => a.reduce((s, x) => s + x, 0) / a.length;
@@ -186,7 +188,19 @@
     if (res.atrMult > o.atrMax) return no(`nến quá lớn ${res.atrMult.toFixed(1)}×ATR (tin/thanh lý)`);
     if (res.atrMult < o.sMinATR) return no(`range ${res.atrMult.toFixed(1)}×ATR < ${o.sMinATR}`);
     // Xu hướng & đà
-    if (!htf.down) return no("1D/4H/1H chưa cùng giảm");
+    // Chế độ: THUẬN XU HƯỚNG (1D/4H/1H giảm) hoặc ĐIỀU CHỈNH (1D còn tăng nhưng giá đã thủng BB mid 1D, 4H/1H giảm).
+    let corrective = false;
+    if (!htf.down) {
+      const corrOk = htf.d1Dir === "tang" && htf.h4Dir === "giam" && htf.h1Dir === "giam" && htf.d1Mid != null && k.c < htf.d1Mid;
+      if (!corrOk || !o.allowCorrective) {
+        if (htf.d1Dir === "tang" && htf.h4Dir === "giam" && htf.h1Dir === "giam" && htf.d1Mid != null && k.c >= htf.d1Mid) return no("1D tăng, giá chưa thủng BB mid 1D");
+        return no("1D/4H/1H chưa cùng giảm");
+      }
+      corrective = true;
+    }
+    if (o.shortRegime === "trend" && corrective) return no("chỉ đo short thuận xu hướng");
+    if (o.shortRegime === "corrective" && !corrective) return no("chỉ đo short điều chỉnh");
+    res.corrective = corrective;
     if (htf.m15Down === false) return no("15M chưa giảm");
     if (htf.h1Close != null && htf.h1Ema21 != null && htf.h1Close >= htf.h1Ema21) return no("giá 1H còn trên EMA21");
     // Bộ lọc riêng của Short
@@ -207,7 +221,8 @@
     const cands = [];
     if (o.setups.S3 && htf.h1RejectUpper && res.volMult >= o.sVol && k.c < e21 && rsiOk) cands.push(["S3", bounceHigh + o.sSlATR * atr]);
     if (o.setups.S1 && touched && k.c < e21 && res.volMult >= o.sVol && rsiOk) cands.push(["S1", bounceHigh + o.sSlATR * atr]);
-    if (o.setups.S2 && k.c < prior12Low && res.atrMult >= o.s2MinATR && res.volMult >= o.s2Vol && rsi2Ok) cands.push(["S2", k.h + o.sSlATR * atr]);
+    // Điều chỉnh: không dùng S2 — 1D còn tăng thì thủng đáy rất dễ là bẫy.
+    if (o.setups.S2 && !corrective && k.c < prior12Low && res.atrMult >= o.s2MinATR && res.volMult >= o.s2Vol && rsi2Ok) cands.push(["S2", k.h + o.sSlATR * atr]);
     if (!cands.length) {
       if (!rsi2Ok || (!rsiOk && !(k.c < prior12Low))) return no(`RSI ${rsi.toFixed(0)} quá thấp`);
       if (res.volMult < o.sVol) return no(`volume ${res.volMult.toFixed(1)}× < ${o.sVol}×`);
@@ -227,10 +242,15 @@
       const tp1 = entry - o.tp1R * risk;
       let tp2 = entry - o.tp2R * risk;
       if (htf.h1Lower && htf.h1Lower < tp1 && htf.h1Lower > tp2) tp2 = htf.h1Lower;
+      if (corrective && htf.d1Lower != null) {
+        // Điều chỉnh: BB dưới 1D là vùng đỡ của xu hướng tăng → TP2 không vượt quá; TP1 cũng phải trước nó.
+        if (tp1 <= htf.d1Lower) { return no(`TP1 vượt BB dưới 1D (${htf.d1Lower.toFixed(2)})`); }
+        if (tp2 < htf.d1Lower) tp2 = htf.d1Lower;
+      }
       res.setup = setup;
       res.side = "short";
       res.plan = { entries: [e1, e2, e3], entry, sl, tp1, tp2, risk, rr1: o.tp1R, rr2: (entry - tp2) / risk, slFromClose: sl - e1,
-        sizeFactor: setup === "S2" || res.momentum ? o.walkSize : 1, timeStopBars: o.sTimeStopBars, partialTP1: 0.5 };
+        sizeFactor: setup === "S2" || res.momentum || corrective ? o.walkSize : 1, timeStopBars: o.sTimeStopBars, partialTP1: 0.5, corrective };
       return res;
     }
     return no(`SL quá xa (${lastRisk.toFixed(1)}×ATR)`);
@@ -278,7 +298,8 @@
       const walkLong = bandWalk(a.P, a.idx, "long", o), walkShort = bandWalk(a.P, a.idx, "short", o);
       let h1RejectUpper = false;
       for (let j = a.idx; j >= a.idx - 1; j--) if (a.P.bb[j] && a.P.candles[j].h >= a.P.bb[j].upper) h1RejectUpper = true;
-      const htf = { up: a.dir === "tang" && b.dir === "tang" && d.dir === "tang", down: a.dir === "giam" && b.dir === "giam" && d.dir === "giam", chaseUp, chaseDown, walkLong, walkShort, h1Upper: a.bb && a.bb.upper, h1Lower: a.bb && a.bb.lower, h1RejectUpper };
+      const htf = { up: a.dir === "tang" && b.dir === "tang" && d.dir === "tang", down: a.dir === "giam" && b.dir === "giam" && d.dir === "giam", chaseUp, chaseDown, walkLong, walkShort, h1Upper: a.bb && a.bb.upper, h1Lower: a.bb && a.bb.lower, h1RejectUpper,
+        d1Dir: d.dir, h4Dir: b.dir, h1Dir: a.dir, d1Mid: d.bb && d.bb.mid, d1Lower: d.bb && d.bb.lower };
       const q = L15 && L15(tClose);
       htf.m15Down = q ? q.dir === "giam" : undefined;
       htf.h1Close = a.P.closes[a.idx]; htf.h1Ema21 = a.P.ema21[a.idx]; htf.h1Rsi = a.P.rsi[a.idx];

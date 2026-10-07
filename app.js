@@ -149,6 +149,7 @@ function sigOptions() {
     rule: store.get("solpha_rule", "atr"),
     sessionFilter: store.get("solpha_session", "1") === "1",
     allowBandWalk: store.get("solpha_walk", "1") === "1",
+    allowCorrective: store.get("solpha_corrective", "1") === "1",
     setups: {
       A: store.get("solpha_setupA", "1") === "1", B: store.get("solpha_setupB", "1") === "1",
       S1: store.get("solpha_setupS1", "1") === "1", S2: store.get("solpha_setupS2", "1") === "1", S3: store.get("solpha_setupS3", "1") === "1"
@@ -168,6 +169,8 @@ function htfContext(map, align) {
     walkShort: SolphaSignals.bandWalk(P1, h1.candles.length - 2, "short", { ...SolphaSignals.DEFAULTS, ...sigOptions() }),
     h1Upper: h1.bb && h1.bb.upper, h1Lower: h1.bb && h1.bb.lower, h1RejectUpper,
     m15Down: align.m15 === "giam",
+    d1Dir: align.d1, h4Dir: align.h4, h1Dir: align.h1,
+    d1Mid: map["1d"].bb && map["1d"].bb.mid, d1Lower: map["1d"].bb && map["1d"].bb.lower,
     h1Close: h1.candles[h1.candles.length - 2].c, h1Ema21: P1.ema21[h1.candles.length - 2], h1Rsi: P1.rsi[h1.candles.length - 2],
     funding: lastFunding
   };
@@ -182,10 +185,10 @@ function candleTrigger(map, align) {
 function renderTrigger(trig) {
   const hit = trig.find((x) => x.side);
   $("trigCard").className = "card " + (hit ? (hit.side === "long" ? "trig-long" : "trig-short") : "");
-  $("trigText").textContent = hit ? `${hit.side.toUpperCase()} · Setup ${hit.setup} · ${hit.label}${hit.momentum ? " · Momentum (½ khối lượng)" : ""}` : "Chưa có nến tín hiệu";
+  $("trigText").textContent = hit ? `${hit.side.toUpperCase()}${hit.corrective ? " ĐIỀU CHỈNH" : ""} · Setup ${hit.setup} · ${hit.label}${hit.momentum ? " · Momentum (½ khối lượng)" : ""}` : "Chưa có nến tín hiệu";
   $("trigBody").innerHTML = trig.map((x) => {
     const time = new Date(x.t).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" });
-    const sig = x.side ? `<span class="tag ${x.side === "long" ? "tang" : "giam"}">${x.side.toUpperCase()} ${x.setup}${x.momentum ? " ·M" : ""}</span>` : '<span class="tag in">—</span>';
+    const sig = x.side ? `<span class="tag ${x.side === "long" ? "tang" : "giam"}">${x.side.toUpperCase()}${x.corrective ? " ĐC" : ""} ${x.setup}${x.momentum ? " ·M" : ""}</span>` : '<span class="tag in">—</span>';
     return `<tr><td><b>${x.label}</b> ${time}</td><td>${fmt(x.o)} → ${fmt(x.c)}</td><td>${fmt(x.range)}${x.atrMult ? ` (${fmt(x.atrMult, 1)}×ATR)` : ""}</td><td>${x.volMult ? fmt(x.volMult, 1) + "×" : "—"}</td><td>${x.pos != null ? Math.round(x.pos * 100) + "%" : "—"}</td><td>${sig}</td><td class="muted">${x.side ? "Đủ điều kiện" : x.why.join(" · ") || "—"}</td></tr>`;
   }).join("");
 }
@@ -194,7 +197,7 @@ function planText(x) {
   const p = x.plan, acct = Number(store.get("solpha_acct", "0")), riskPct = Number(store.get("solpha_risk", "1")) * (p.sizeFactor || 1);
   const riskUsd = acct * riskPct / 100, qty = riskUsd && p.risk ? riskUsd / p.risk : 0;
   return {
-    head: `${x.side === "long" ? "LONG" : "SHORT"} · Setup ${x.setup} · ${x.label}${(p.sizeFactor || 1) < 1 ? " · ½ khối lượng" : ""}`,
+    head: `${x.side === "long" ? "LONG" : "SHORT"}${p.corrective ? " ĐIỀU CHỈNH" : ""} · Setup ${x.setup} · ${x.label}${(p.sizeFactor || 1) < 1 ? " · ½ khối lượng" : ""}`,
     lines: [
       `Vào 3 phần: ${p.entries.map((e) => fmt(e)).join(" / ")} (TB ${fmt(p.entry)})`,
       `SL: ${fmt(p.sl)} (rủi ro ${fmt(p.risk)}/SOL)`,
@@ -392,7 +395,7 @@ async function fullScan(reason = "manual") {
       lastTriggerKey = key;
       store.set("solpha_last_trigger", key);
       const p = x.plan;
-      const msg = `${x.side.toUpperCase()} Setup ${x.setup} ${x.label}${x.momentum ? " (Momentum ½ size)" : ""} · vào ${fmt(p.entries[0])}/${fmt(p.entries[1])}/${fmt(p.entries[2])} · SL ${fmt(p.sl)} · TP1 ${fmt(p.tp1)} (1:${fmt(p.rr1, 1)}) · TP2 ${fmt(p.tp2)} (1:${fmt(p.rr2, 1)})`;
+      const msg = `${x.side.toUpperCase()}${x.corrective ? " ĐIỀU CHỈNH (½ size)" : ""} Setup ${x.setup} ${x.label}${x.momentum ? " (Momentum ½ size)" : ""} · vào ${fmt(p.entries[0])}/${fmt(p.entries[1])}/${fmt(p.entries[2])} · SL ${fmt(p.sl)} · TP1 ${fmt(p.tp1)} (1:${fmt(p.rr1, 1)}) · TP2 ${fmt(p.tp2)} (1:${fmt(p.rr2, 1)})`;
       addLog(msg, true);
       await notify("SOLPHA nến tín hiệu", msg);
     }
@@ -462,6 +465,7 @@ renderLogs(); schedulePrice(); scheduleHourly(); fullScan("boot");
   bind("chkSetupS1", "solpha_setupS1", "1", true);
   bind("chkSetupS2", "solpha_setupS2", "1", true);
   bind("chkSetupS3", "solpha_setupS3", "1", true);
+  bind("chkCorrective", "solpha_corrective", "1", true);
 })();
 // ---- Backtest: so bộ cũ ($0.55) với bộ mới (ATR + volume + Setup A/B) trên dữ liệu thật của Binance ----
 $("btnBacktest").addEventListener("click", async () => {
@@ -477,7 +481,9 @@ $("btnBacktest").addEventListener("click", async () => {
       ["LONG chỉ A", { ...base, rule: "atr", only: "long", setups: { A: true, B: false } }],
       ["LONG chỉ B", { ...base, rule: "atr", only: "long", setups: { A: false, B: true } }],
       ["LONG chặn cứng 1H BB", { ...base, rule: "atr", only: "long", allowBandWalk: false }],
-      ["SHORT S1 + S2 + S3", { ...base, rule: "atr", only: "short", setups: { S1: true, S2: true, S3: true } }],
+      ["SHORT S1 + S2 + S3 (tất cả)", { ...base, rule: "atr", only: "short", setups: { S1: true, S2: true, S3: true } }],
+      ["SHORT thuận xu hướng", { ...base, rule: "atr", only: "short", shortRegime: "trend" }],
+      ["SHORT điều chỉnh (1D còn tăng)", { ...base, rule: "atr", only: "short", shortRegime: "corrective", allowCorrective: true }],
       ["SHORT chỉ S1 (hồi bị từ chối)", { ...base, rule: "atr", only: "short", setups: { S1: true, S2: false, S3: false } }],
       ["SHORT chỉ S2 (thủng đáy)", { ...base, rule: "atr", only: "short", setups: { S1: false, S2: true, S3: false } }],
       ["SHORT chỉ S3 (1H BB trên thất bại)", { ...base, rule: "atr", only: "short", setups: { S1: false, S2: false, S3: true } }]
@@ -487,7 +493,7 @@ $("btnBacktest").addEventListener("click", async () => {
     out.innerHTML = `<div class="muted">Từ ${day(r0.from)} đến ${day(r0.to)} · vào ở giá đóng nến, chốt ở 1.5R; Long tối đa 4 giờ, Short tối đa 2 giờ. Nến chạm cả SL và TP tính là thua. Backtest Short bỏ qua bộ lọc funding (không có dữ liệu lịch sử).</div>
       <div class="table-wrap"><table><thead><tr><th>Bộ điều kiện</th><th>Số lệnh</th><th>Thắng</th><th>R TB/lệnh</th><th>Tổng R</th><th>Sụt tối đa</th></tr></thead><tbody>${rows.map(([n, r]) =>
         `<tr><td><b>${n}</b></td><td>${r.n}</td><td>${r.n ? Math.round(r.winRate * 100) + "%" : "—"}</td><td class="${r.avgR >= 0 ? "up" : "down"}">${r.n ? (r.avgR >= 0 ? "+" : "") + fmt(r.avgR) : "—"}</td><td class="${r.totalR >= 0 ? "up" : "down"}">${(r.totalR >= 0 ? "+" : "") + fmt(r.totalR, 1)}R</td><td>${fmt(r.maxDD, 1)}R</td></tr>`).join("")}</tbody></table></div>
-      ${[["LONG", rows[1][1]], ["SHORT", rows[5][1]]].map(([n, r]) => r.topWhy && r.topWhy.length ? `<div class="muted"><b>${n}</b> bị loại nhiều nhất vì: ${r.topWhy.slice(0, 3).map(([w, c]) => `${w.replace(/#/g, "x")} (${c})`).join(" · ")}</div>` : "").join("")}
+      ${[["LONG", rows[1][1]], ["SHORT", rows[5][1]], ["SHORT điều chỉnh", rows[7][1]]].map(([n, r]) => r.topWhy && r.topWhy.length ? `<div class="muted"><b>${n}</b> bị loại nhiều nhất vì: ${r.topWhy.slice(0, 3).map(([w, c]) => `${w.replace(/#/g, "x")} (${c})`).join(" · ")}</div>` : "").join("")}
       <div class="muted">Khoảng 5 ngày là mẫu nhỏ — chạy lại mỗi tuần và chỉ tin khi xu hướng lặp lại. Chưa tính phí giao dịch và trượt giá.</div>`;
   } catch (e) { out.textContent = "Lỗi backtest: " + (e.message || e); }
   btn.disabled = false;

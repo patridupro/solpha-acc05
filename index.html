@@ -79,7 +79,7 @@
         </table>
       </div>
       <p class="muted">Bộ mới (Long; Short ngược lại): 1D/4H/1H tăng · 4H/1D ở BB trên = chase, chặn · 1H ở BB trên chỉ cho vào khi đang bám dải (BB 1H mở rộng, RSI 1H ≤ 75, giá ≤ 0.5 ATR ngoài dải) → lệnh Momentum ½ khối lượng · nến 1.3–3×ATR(14), đóng 25% trên · volume ≥ 1.5× TB20 · RSI ≤ 75, cách EMA21 ≤ 1.5×ATR · <b>Setup A</b>: đã về BB mid trong 6 nến rồi đóng lại trên mid · <b>Setup B</b>: BB co hẹp (≤ phân vị 20%) rồi đóng vượt BB trên · tránh giờ funding (07/15/23h VN ±10′), tin Mỹ (19:30/20:30 ±15′), 03–06h VN.</p>
-      <p class="muted"><b>Short</b> (bộ riêng, crypto giảm nhanh – hồi nông): 1D/4H/1H giảm + 15M giảm + giá dưới EMA21 1H · nến ≥ 1.2×ATR đóng 25% dưới · <b>S3</b>: 1H vừa chạm BB trên rồi thất bại · <b>S1</b>: 6 nến trước đã hồi chạm EMA21/BB mid, nến đóng dưới EMA21, volume ≥ 1.3× · <b>S2</b>: đóng dưới đáy 12 nến, ≥ 1.3×ATR, volume ≥ 1.5×, ½ khối lượng · không short khi funding ≤ −0.03%, RSI 1H &lt; 25, vừa có nến &gt; 3×ATR, hoặc 4H/1D ở BB dưới · SL = đỉnh nhịp hồi + 0.3 ATR · TP1 1.5R chốt ½, TP2 3R / BB dưới 1H · quá 2 giờ chưa TP1 thì thoát.</p>
+      <p class="muted"><b>Short</b> (bộ riêng, crypto giảm nhanh – hồi nông): 1D/4H/1H giảm + 15M giảm + giá dưới EMA21 1H · nến ≥ 1.2×ATR đóng 25% dưới · <b>S3</b>: 1H vừa chạm BB trên rồi thất bại · <b>S1</b>: 6 nến trước đã hồi chạm EMA21/BB mid, nến đóng dưới EMA21, volume ≥ 1.3× · <b>S2</b>: đóng dưới đáy 12 nến, ≥ 1.3×ATR, volume ≥ 1.5×, ½ khối lượng · không short khi funding ≤ −0.03%, RSI 1H &lt; 25, vừa có nến &gt; 3×ATR, hoặc 4H/1D ở BB dưới · SL = đỉnh nhịp hồi + 0.3 ATR · TP1 1.5R chốt ½, TP2 3R / BB dưới 1H · quá 2 giờ chưa TP1 thì thoát. <b>Short điều chỉnh</b>: 1D còn tăng nhưng giá đã đóng dưới BB mid 1D, 4H/1H/15M giảm → chỉ S1/S3, ½ khối lượng, TP2 không vượt BB dưới 1D (bỏ lệnh nếu TP1 đã vượt).</p>
       <div class="jactions"><button id="btnBacktest" class="btn ghost">Backtest 5M (~5 ngày)</button></div>
       <div id="btBox" class="btbox"></div>
     </section>
@@ -139,6 +139,7 @@
           <label><input type="checkbox" id="chkSetupS1" /> Short S1 · hồi chạm EMA21/BB mid bị từ chối</label>
           <label><input type="checkbox" id="chkSetupS2" /> Short S2 · thủng đáy 12 nến (½ khối lượng)</label>
           <label><input type="checkbox" id="chkSetupS3" /> Short S3 · 1H chạm BB trên thất bại</label>
+          <label><input type="checkbox" id="chkCorrective" /> Short điều chỉnh · 1D còn tăng nhưng giá thủng BB mid 1D (S1/S3, ½ khối lượng)</label>
           <label><input type="checkbox" id="chkSound" checked /> Âm báo khi cảnh báo</label>
           <label>Làm mới giá
             <select id="selPrice">

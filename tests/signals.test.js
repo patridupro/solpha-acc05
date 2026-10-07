@@ -1,0 +1,35 @@
+// Kiểm tra nhanh bộ máy tín hiệu: node tests/signals.test.js
+const assert = require("assert");
+const S = require("../signals.js");
+
+// 1) Mọi tham số mặc định phải có giá trị (chống lỗi chú thích làm mất tham số).
+for (const [k, v] of Object.entries(S.DEFAULTS)) assert.notStrictEqual(v, undefined, `DEFAULTS.${k} bị undefined`);
+for (const k of ["sCrashATR", "sH1RsiMin", "fundingMin", "sTimeStopBars", "allowCorrective", "s2RsiMin", "walkSize"]) assert.ok(k in S.DEFAULTS, `thiếu DEFAULTS.${k}`);
+
+// 2) Dữ liệu mẫu: xu hướng giảm có nhịp hồi chạm EMA21, nến đỏ lớn đóng sát đáy (Short S1).
+const T0 = Date.UTC(2026, 9, 7, 2, 0), i = 148;
+const c = Array.from({ length: 150 }, (_, j) => { const p = 140 - j * 0.04 + Math.sin(j / 3) * 0.6; return { t: T0 + (j - 150) * 300000, o: p + 0.05, h: p + 0.2, l: p - 0.2, c: p, v: 100 }; });
+const P0 = S.prepare(c), atr = P0.atr[147], e = P0.ema21[147];
+c[145] = { ...c[145], h: e + 0.15 };
+c[i] = { t: c[i].t, o: e - 0.05, h: e, l: e - 1.5 * atr, c: e - 1.45 * atr, v: 220 };
+const P = S.prepare(c);
+const H = (x) => ({ up: false, down: true, d1Dir: "giam", h4Dir: "giam", h1Dir: "giam", chaseUp: [], chaseDown: [], walkShort: { ok: true }, m15Down: true, h1Close: 130, h1Ema21: 131, h1Rsi: 42, funding: 0.0001, h1Upper: 140, h1Lower: 100, h1RejectUpper: false, ...x });
+const ev = (htf, o) => S.evaluate(P, i, htf, 5, o || {});
+
+const s1 = ev(H({}));
+assert.strictEqual(s1.side, "short"); assert.strictEqual(s1.setup, "S1");
+assert.ok(Math.abs(s1.plan.tp1 - (s1.plan.entry - 1.5 * s1.plan.risk)) < 1e-9, "TP1 = giá vào − 1.5R");
+assert.strictEqual(s1.plan.timeStopBars, 24);
+assert.strictEqual(ev(H({ funding: -0.0005 })).side, null, "funding quá âm phải chặn");
+assert.strictEqual(ev(H({ h1Rsi: 20 })).side, null, "RSI 1H < 25 phải chặn");
+assert.strictEqual(ev(H({ chaseDown: ["4H"] })).side, null, "4H ở BB dưới phải chặn");
+assert.strictEqual(ev(H({ m15Down: false })).side, null, "15M chưa giảm phải chặn");
+
+// 3) Short điều chỉnh: 1D còn tăng, giá dưới BB mid 1D → ½ khối lượng; trên BB mid → chặn.
+const close = c[i].c;
+const corr = ev(H({ down: false, d1Dir: "tang", d1Mid: close + 2, d1Lower: close - 6 }));
+assert.strictEqual(corr.side, "short"); assert.ok(corr.corrective); assert.strictEqual(corr.plan.sizeFactor, 0.5);
+assert.strictEqual(ev(H({ down: false, d1Dir: "tang", d1Mid: close - 1, d1Lower: close - 6 })).side, null);
+assert.strictEqual(ev(H({ down: false, d1Dir: "tang", d1Mid: close + 2, d1Lower: close - 6 }), { allowCorrective: false }).side, null);
+
+console.log("signals.test.js: OK");
