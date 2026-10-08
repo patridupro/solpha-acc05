@@ -33,3 +33,33 @@ assert.strictEqual(ev(H({ down: false, d1Dir: "tang", d1Mid: close - 1, d1Lower:
 assert.strictEqual(ev(H({ down: false, d1Dir: "tang", d1Mid: close + 2, d1Lower: close - 6 }), { allowCorrective: false }).side, null);
 
 console.log("signals.test.js: OK");
+
+// 4) Momentum 4H/1H (không chờ 1D): 4H+1H giảm, 15M+5M giảm và cùng chạm BB dưới → SHORT ½ khối lượng.
+{
+  const T1 = Date.UTC(2026, 9, 8, 2, 0), n = 150, j = 148;
+  const mkSeries = (sgn, slope = 0.03) => {
+    const s = Array.from({ length: n }, (_, x) => { const p = 120 + sgn * x * slope + Math.sin(x / 2.5) * 0.25; return { t: T1 + (x - n) * 300000, o: p - sgn * 0.03, h: p + 0.12, l: p - 0.12, c: p, v: 100 }; });
+    const P0 = S.prepare(s), b = P0.bb[j - 1], a = P0.atr[j - 1];
+    // nến đã đóng xuyên dải ngoài theo hướng xu hướng nhưng không quá lớn
+    s[j] = sgn < 0 ? { t: s[j].t, o: b.lower + 0.15, h: b.lower + 0.2, l: b.lower - 0.4 * a, c: b.lower - 0.3 * a, v: 180 }
+                   : { t: s[j].t, o: b.upper - 0.15, l: b.upper - 0.2, h: b.upper + 0.4 * a, c: b.upper + 0.3 * a, v: 180 };
+    return S.prepare(s);
+  };
+  const Pd = mkSeries(-1), Pu = mkSeries(1, 0.012);
+  const Hm = (x) => ({ h4Dir: "giam", h1Dir: "giam", d1Dir: "tang", funding: 0.0001, ...x });
+  const m15d = { dir: "giam", touchLower: true, touchUpper: false }, m15u = { dir: "tang", touchLower: false, touchUpper: true };
+  const em = (P, m, h, o) => S.evaluateMomentum(P, j, m, h, 5, o || {});
+  const sh = em(Pd, m15d, Hm({}));
+  assert.strictEqual(sh.side, "short", "momentum short: " + sh.why.join(";")); assert.strictEqual(sh.plan.sizeFactor, 0.5); assert.ok(sh.d1Against);
+  assert.ok(sh.plan.sl > sh.plan.entry && sh.plan.tp1 < sh.plan.entry);
+  assert.strictEqual(sh.plan.timeStopBars, 12);
+  assert.strictEqual(em(Pd, m15d, Hm({ h4Dir: "tang" })).side, null, "4H ngược phải chặn");
+  assert.strictEqual(em(Pd, { ...m15d, touchLower: false }, Hm({})).side, null, "15M chưa chạm BB dưới phải chặn");
+  assert.strictEqual(em(Pd, { ...m15d, dir: "tang" }, Hm({})).side, null, "15M ngược phải chặn");
+  assert.strictEqual(em(Pd, m15d, Hm({ funding: -0.0005 })).side, null, "funding quá âm phải chặn");
+  assert.strictEqual(em(Pd, m15d, Hm({}), { allowMomentum4H: false }).side, null, "tắt chế độ phải chặn");
+  const lg = em(Pu, m15u, Hm({ h4Dir: "tang", h1Dir: "tang", d1Dir: "tang" }));
+  assert.strictEqual(lg.side, "long", "momentum long: " + lg.why.join(";")); assert.ok(!lg.d1Against);
+  assert.strictEqual(em(Pu, m15u, Hm({ h4Dir: "tang", h1Dir: "tang" }), { m4hRsiMax: 10 }).side, null, "RSI quá mua phải chặn");
+}
+console.log("momentum 4H/1H: OK");

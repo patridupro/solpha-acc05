@@ -22,6 +22,7 @@
     sMinATR: 1.2, sVol: 1.3, s2MinATR: 1.3, s2Vol: 1.5, s2Lookback: 12, sBounceLookback: 6,
     sSlATR: 0.3, sMaxRiskATR: 2.5, s2RsiMin: 20,
     sCrashATR: 3, sH1RsiMin: 25, fundingMin: -0.0003, sTimeStopBars: 24,
+    allowMomentum4H: true, m4hRsiMin: 20, m4hRsiMax: 80, m4hSlATR: 0.3, m4hMaxRiskATR: 2, m4hTimeStopBars: 12,
     allowCorrective: true, shortRegime: "all" // shortRegime: "all" | "trend" | "corrective" (dùng cho backtest)
   };
 
@@ -70,7 +71,7 @@
   // Tính sẵn chỉ báo cho cả chuỗi nến (gọi 1 lần, dùng cho mọi chỉ số i).
   function prepare(candles) {
     const closes = candles.map((k) => k.c);
-    return { candles, closes, ema21: emaArr(closes, 21), rsi: rsiArr(closes, 14), atr: atrArr(candles, 14), bb: bbArr(closes, 20, 2), vol: candles.map((k) => k.v) };
+    return { candles, closes, ema9: emaArr(closes, 9), ema21: emaArr(closes, 21), rsi: rsiArr(closes, 14), atr: atrArr(candles, 14), bb: bbArr(closes, 20, 2), vol: candles.map((k) => k.v) };
   }
 
   // Giờ nhiễu (theo giờ ĐÓNG nến, UTC): funding 00/08/16 ±10', tin Mỹ 12:30/13:30 ±15', thanh khoản thấp 20:00–23:00 UTC (03–06h VN).
@@ -257,6 +258,54 @@
     return res;
   }
 
+  // ---- MOMENTUM 4H/1H: không chờ 1D. 4H + 1H cùng hướng, 15M + 5M cùng hướng và CÙNG CHẠM BB
+  // (BB dưới → SHORT, BB trên → LONG). Vào theo đà nên ½ khối lượng, thoát sau 1 giờ nếu chưa TP1.
+  // m15: { dir, touchLower, touchUpper } của nến 15M đã đóng gần nhất.
+  function evaluateMomentum(P, i, m15, htf, tfMinutes, opt) {
+    const o = { ...DEFAULTS, ...opt };
+    const k = P.candles[i], atr = P.atr[i], bb = P.bb[i], rsi = P.rsi[i], e9 = P.ema9[i], e21 = P.ema21[i];
+    const res = { i, t: k.t, o: k.o, h: k.h, l: k.l, c: k.c, v: k.v, atr, rsi, side: null, setup: null, why: [], plan: null, engine: "m4h" };
+    const no = (w) => { res.why.push(w); return res; };
+    if (!o.allowMomentum4H) return no("đang tắt");
+    if (atr == null || !bb || rsi == null || e9 == null || e21 == null) return no("thiếu dữ liệu");
+    const range = k.h - k.l; res.range = range; res.atrMult = range / atr; res.pos = range > 0 ? (k.c - k.l) / range : 0.5;
+    const volAvg = sma(P.vol.slice(i - 20, i)); res.volMult = volAvg ? k.v / volAvg : 0;
+    const dir5 = e9 > e21 ? "tang" : e9 < e21 ? "giam" : "sideway";
+    const htfSide = htf.h4Dir === "giam" && htf.h1Dir === "giam" ? "short" : htf.h4Dir === "tang" && htf.h1Dir === "tang" ? "long" : null;
+    if (!htfSide) return no("4H/1H chưa cùng hướng");
+    const want = htfSide === "short" ? "giam" : "tang";
+    if (m15.dir !== want) return no(`15M chưa ${want === "giam" ? "giảm" : "tăng"}`);
+    if (dir5 !== want) return no(`5M chưa ${want === "giam" ? "giảm" : "tăng"}`);
+    const t5 = htfSide === "short" ? k.l <= bb.lower : k.h >= bb.upper;
+    const t15 = htfSide === "short" ? m15.touchLower : m15.touchUpper;
+    const band = htfSide === "short" ? "BB dưới" : "BB trên";
+    if (!t5 && !t15) return no(`5M và 15M chưa chạm ${band}`);
+    if (!t5) return no(`5M chưa chạm ${band}`);
+    if (!t15) return no(`15M chưa chạm ${band}`);
+    // Chốt an toàn tối thiểu
+    if (res.atrMult > o.atrMax) return no(`nến quá lớn ${res.atrMult.toFixed(1)}×ATR (tin/thanh lý)`);
+    for (let j = i - 3; j < i; j++) { const x = P.candles[j], a = P.atr[j - 1]; if (a && x.h - x.l > o.sCrashATR * a) return no("vừa có nến > 3×ATR, chờ ổn định"); }
+    if (htfSide === "short" && rsi < o.m4hRsiMin) return no(`RSI 5M ${rsi.toFixed(0)} < ${o.m4hRsiMin} (quá bán cực độ)`);
+    if (htfSide === "long" && rsi > o.m4hRsiMax) return no(`RSI 5M ${rsi.toFixed(0)} > ${o.m4hRsiMax} (quá mua cực độ)`);
+    if (htfSide === "short" && htf.funding != null && htf.funding <= o.fundingMin) return no(`funding ${(htf.funding * 100).toFixed(3)}% quá âm`);
+    if (o.sessionFilter) { const s = sessionBlock(k.t + tfMinutes * 60000); if (s) return no(s); }
+    // Kế hoạch: vào 3 phần (giá đóng / hồi 1/3 nến / hồi 0.25 ATR nữa).
+    // SL: lệnh theo đà gãy khi giá lấy lại EMA9 5M → SL = max(đỉnh nến, EMA9) + 0.3 ATR (Long: min(đáy, EMA9) − 0.3 ATR).
+    const sgn = htfSide === "long" ? 1 : -1;
+    const sl = htfSide === "short" ? Math.max(k.h, e9) + o.m4hSlATR * atr : Math.min(k.l, e9) - o.m4hSlATR * atr;
+    const e1 = k.c, e2 = k.c - sgn * range / 3;
+    let e3 = e2 - sgn * 0.25 * atr;
+    if (sgn * (e3 - sl) <= 0) e3 = (e2 + sl) / 2;
+    const entry = (e1 + e2 + e3) / 3, risk = sgn * (entry - sl);
+    if (risk <= 0 || risk > o.m4hMaxRiskATR * atr) return no(`SL quá xa (${(risk / atr).toFixed(1)}×ATR)`);
+    const tp1 = entry + sgn * o.tp1R * risk, tp2 = entry + sgn * o.tp2R * risk;
+    res.side = htfSide; res.setup = "M4H";
+    res.d1Against = htf.d1Dir && htf.d1Dir !== want;
+    res.plan = { entries: [e1, e2, e3], entry, sl, tp1, tp2, risk, rr1: o.tp1R, rr2: o.tp2R, slFromClose: Math.abs(e1 - sl),
+      sizeFactor: o.walkSize, timeStopBars: o.m4hTimeStopBars, partialTP1: 0.5, momentum4h: true };
+    return res;
+  }
+
   // Kết quả lệnh sau tín hiệu: vào ở giá đóng, SL như kế hoạch nhưng tính từ giá đóng, TP = tp1R × rủi ro. Nến chạm cả 2 → tính SL (thận trọng).
   function outcome(candles, i, sig, tp1R, maxBars = (sig.plan && sig.plan.timeStopBars) || 48) {
     const sgn = sig.side === "long" ? 1 : -1, entry = sig.c, sl = sig.plan.sl, risk = Math.abs(entry - sl), tp = entry + sgn * tp1R * risk;
@@ -304,10 +353,16 @@
       htf.m15Down = q ? q.dir === "giam" : undefined;
       htf.h1Close = a.P.closes[a.idx]; htf.h1Ema21 = a.P.ema21[a.idx]; htf.h1Rsi = a.P.rsi[a.idx];
       htf.funding = null; // Binance không trả funding lịch sử theo nến → backtest bỏ qua bộ lọc funding
-      const sig = evaluate(P, i, htf, tfMinutes, o);
+      let sig;
+      if (o.engine === "m4h") {
+        if (!q) continue;
+        const qc = q.P.candles[q.idx], qb = q.P.bb[q.idx];
+        htf.h4Dir = b.dir; htf.h1Dir = a.dir; htf.d1Dir = d.dir;
+        sig = evaluateMomentum(P, i, { dir: q.dir, touchLower: !!qb && qc.l <= qb.lower, touchUpper: !!qb && qc.h >= qb.upper }, htf, tfMinutes, o);
+      } else sig = evaluate(P, i, htf, tfMinutes, o);
       if (!sig.side) {
         // Chỉ đếm nến có hướng phù hợp (Long: đóng nửa trên; Short: đóng nửa dưới) để biết điều kiện nào chặn nhiều nhất.
-        const side = sig.pos >= 0.5 ? "long" : "short";
+        const side = o.engine === "m4h" ? o.only : sig.pos >= 0.5 ? "long" : "short"; // momentum: hướng do 4H/1H quyết định
         if (sig.why[0] && (!o.only || o.only === side)) { const w = sig.why[0].replace(/[-\d.]+/g, "#"); why[w] = (why[w] || 0) + 1; }
         continue;
       }
@@ -326,6 +381,6 @@
       from: c5[100] && c5[100].t, to: c5[c5.length - 1] && c5[c5.length - 1].t };
   }
 
-  const api = { DEFAULTS, prepare, evaluate, outcome, backtest, sessionBlock, bandWalk, atrArr, emaArr, rsiArr, bbArr };
+  const api = { DEFAULTS, prepare, evaluate, evaluateMomentum, outcome, backtest, sessionBlock, bandWalk, atrArr, emaArr, rsiArr, bbArr };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.SolphaSignals = api;
 })(this);

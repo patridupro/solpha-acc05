@@ -58,6 +58,7 @@ Xem [`docs/PWA-DEPLOY-GUIDE.md`](docs/PWA-DEPLOY-GUIDE.md) (bản PDF: `docs/PWA
     - Không Short khi: funding ≤ −0.03%/8h, RSI 1H < 25, vừa có nến > 3×ATR (so với ATR trước nến đó), 4H/1D ở BB dưới; 1H ở BB dưới chỉ cho khi đang bám dải (½ khối lượng).
     - SL = đỉnh nhịp hồi + 0.3 ATR (S2: đỉnh nến + 0.3 ATR), bỏ nếu rủi ro > 2.5 ATR. TP1 = 1.5R **chốt ½** + dời SL về giá vào, TP2 = 3R hoặc BB dưới 1H. **Quá 2 giờ chưa TP1 thì thoát.**
   - **Short điều chỉnh**: 1D còn tăng nhưng giá đóng dưới BB mid 1D, 4H/1H/15M giảm → chỉ S1/S3, **½ khối lượng**, TP2 không vượt BB dưới 1D (bỏ lệnh nếu TP1 đã vượt). Tắt được trong Cài đặt.
+  - **Momentum 4H/1H** (không chờ 1D): 4H + 1H cùng hướng EMA, 15M + 5M cùng hướng và nến đã đóng của cả hai **cùng chạm BB dưới → SHORT** / **BB trên → LONG**. ½ khối lượng; bỏ qua khi RSI 5M < 20 (Short) / > 80 (Long), vừa có nến > 3×ATR, funding quá âm (Short), giờ nhiễu. SL = max(đỉnh nến, EMA9 5M) + 0.3 ATR (Long ngược lại), tối đa 2 ATR; TP1 1.5R chốt ½, TP2 3R; quá 1 giờ chưa TP1 thì thoát. Cảnh báo ghi "ngược 1D" khi 1D đi ngược chiều. Tắt được trong Cài đặt.
   - Backtest tách Long/Short và từng setup, kèm "lý do bị loại nhiều nhất". Backtest Short bỏ qua bộ lọc funding (Binance không trả funding lịch sử theo nến).
   - Bộ cũ (range ≥ $0.55) vẫn chọn được trong Cài đặt. Nút **Backtest** so 4 bộ trên ~1.500 nến 5M thật (vào ở giá đóng, chốt 1.5R, tối đa 4 giờ, nến chạm cả SL/TP tính thua, chưa tính phí).
 
