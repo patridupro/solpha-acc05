@@ -22,6 +22,7 @@
     sMinATR: 1.2, sVol: 1.3, s2MinATR: 1.3, s2Vol: 1.5, s2Lookback: 12, sBounceLookback: 6,
     sSlATR: 0.3, sMaxRiskATR: 2.5, s2RsiMin: 20,
     sCrashATR: 3, sH1RsiMin: 25, fundingMin: -0.0003, sTimeStopBars: 24,
+    feeRate: 0.0008, // phí + trượt giá cả vào lẫn ra (~0.04%×2 taker), trừ vào R của mỗi lệnh trong backtest
     allowMomentum4H: true, m4hRsiMin: 10, m4hRsiMax: 90, m4hSlATR: 0.3, m4hMaxRiskATR: 2, m4hTimeStopBars: 12,
     allowCorrective: true, shortRegime: "all" // shortRegime: "all" | "trend" | "corrective" (dùng cho backtest)
   };
@@ -325,8 +326,8 @@
       if (hitSL) return { r: -1, bars: j - i, exit: "SL" };
       if (hitTP) return { r: tp1R, bars: j - i, exit: "TP" };
     }
-    const last = candles[Math.min(candles.length, i + 1 + maxBars) - 1];
-    if (!last || i + 1 >= candles.length) return null; // chưa đủ dữ liệu sau tín hiệu
+    if (i + maxBars >= candles.length) return null; // chưa đủ dữ liệu sau tín hiệu để biết kết quả
+    const last = candles[i + maxBars];
     return { r: (sgn * (last.c - entry)) / risk, bars: maxBars, exit: "Hết giờ" };
   }
 
@@ -410,6 +411,8 @@
       if (o.only && sig.side !== o.only) continue;
       const out = outcome(c5, i, sig, o.tp1R);
       if (!out) continue;
+      const riskPx = Math.abs(sig.c - sig.plan.sl);
+      if (riskPx > 0 && o.feeRate) out.r -= (o.feeRate * sig.c) / riskPx; // phí tính theo R
       trades.push({ t: sig.t, side: sig.side, setup: sig.setup, ...out });
       busyUntil = i + out.bars;
     }

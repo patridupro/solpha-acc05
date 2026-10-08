@@ -6,6 +6,13 @@ PWA theo dõi SOL/USDT futures đa khung (5M, 15M, 1H, 4H, 1D), RSI / EMA / Boll
 
 https://solpha.pages.dev — Cloudflare Pages build từ nhánh `claude/intelligent-lamport-vrk29w` của repo này (1 build mỗi lần push). Đường dẫn trong app đều tương đối nên vẫn chạy được nếu sau này chuyển sang GitHub Pages/Netlify.
 
+## Tối ưu 30 ngày
+
+Nút **Tối ưu 30 ngày** (ô Nến tín hiệu): app tải 30 ngày dữ liệu Binance thật ngay trên máy, đo riêng từng điều kiện (Long A, Long B, Short S1/S2/S3, Short điều chỉnh, Momentum 4H/1H) và 2 bộ lọc dùng chung (bám dải, tránh giờ nhiễu).
+- Mỗi lệnh đã **trừ phí + trượt giá 0.08%** giá trị lệnh (quy ra R).
+- **Đạt chuẩn** = ≥ 6 lệnh, thắng ≥ 50%, R trung bình sau phí > 0; xếp theo tỷ lệ thắng. Có cột nửa đầu / nửa sau 30 ngày để xem độ ổn định.
+- Bấm **Áp dụng** → chỉ giữ điều kiện đạt chuẩn (các ô Cài đặt tự đổi). Nếu không điều kiện nào đạt, giữ nguyên cài đặt. Nên chạy lại mỗi tuần.
+
 ## Soi lại thời điểm
 
 Trong ô Nến tín hiệu: chọn ngày giờ → **Soi lại 3 giờ**. App tải dữ liệu Binance quanh mốc đó và liệt kê từng nến 5M: hướng 1D/4H/1H/15M, quyết định của bộ chính và của Momentum 4H/1H, kèm lý do. Bộ lọc funding không áp dụng khi xem lại.

@@ -551,3 +551,85 @@ $("btnBacktest").addEventListener("click", async () => {
     btn.disabled = false;
   });
 })();
+
+// ---- Tối ưu 30 ngày: đo từng điều kiện trên dữ liệu Binance thật, chỉ giữ điều kiện đạt chuẩn ----
+async function loadHistory(interval, minutes, days, warmup) {
+  const need = Math.ceil(days * 1440 / minutes) + warmup, out = [];
+  let end = Date.now();
+  while (out.length < need) {
+    const batch = await loadKlinesUntil(interval, 1500, end);
+    if (!batch.length) break;
+    const fresh = batch.filter((k) => !out.length || k.t < out[0].t);
+    if (!fresh.length) break;
+    out.unshift(...fresh);
+    end = fresh[0].t - 1;
+    if (batch.length < 500) break; // hết lịch sử (nguồn spot trả tối đa 1000)
+  }
+  return out.slice(-need);
+}
+const OPT_RULES = { minTrades: 6, minWin: 0.5, minAvgR: 0 };
+const OPT_ITEMS = [
+  { key: "solpha_setupA", name: "LONG Setup A (pullback)", opt: { only: "long", setups: { A: true, B: false } } },
+  { key: "solpha_setupB", name: "LONG Setup B (bứt phá sau nén)", opt: { only: "long", setups: { A: false, B: true } } },
+  { key: "solpha_setupS1", name: "SHORT S1 (hồi bị từ chối)", opt: { only: "short", shortRegime: "trend", setups: { S1: true, S2: false, S3: false } } },
+  { key: "solpha_setupS2", name: "SHORT S2 (thủng đáy)", opt: { only: "short", shortRegime: "trend", setups: { S1: false, S2: true, S3: false } } },
+  { key: "solpha_setupS3", name: "SHORT S3 (1H BB trên thất bại)", opt: { only: "short", shortRegime: "trend", setups: { S1: false, S2: false, S3: true } } },
+  { key: "solpha_corrective", name: "SHORT điều chỉnh (1D còn tăng)", opt: { only: "short", shortRegime: "corrective", allowCorrective: true, setups: { S1: true, S2: false, S3: true } } },
+  { key: "solpha_m4h", name: "SHORT Momentum 4H/1H", opt: { only: "short", engine: "m4h", allowMomentum4H: true } }
+];
+let optResult = null;
+$("btnOptimize") && $("btnOptimize").addEventListener("click", async () => {
+  const btn = $("btnOptimize"), out = $("optBox"), tick = () => new Promise((r) => setTimeout(r, 0));
+  btn.disabled = true;
+  try {
+    out.textContent = "Đang tải 30 ngày dữ liệu Binance (5M, 15M, 1H, 4H, 1D)…";
+    const [c5, m15, h1, h4, d1] = await Promise.all([loadHistory("5m", 5, 30, 120), loadHistory("15m", 15, 30, 120), loadHistory("1h", 60, 30, 300), loadHistory("4h", 240, 30, 200), loadHistory("1d", 1440, 30, 150)]);
+    const closed = (a) => a.slice(0, -1), base = { ...sigOptions(), rule: "atr", sessionFilter: true, allowBandWalk: true };
+    const run = (o) => SolphaSignals.backtest(closed(c5), closed(h1), closed(h4), closed(d1), { ...base, ...o }, 5, closed(m15));
+    const mid = c5[Math.floor(c5.length / 2)].t;
+    const half = (r, first) => { const t = r.trades.filter((x) => (first ? x.t < mid : x.t >= mid)); return t.length ? t.reduce((s, x) => s + x.r, 0) / t.length : null; };
+    const rows = [];
+    for (const it of OPT_ITEMS) {
+      out.textContent = `Đang đo: ${it.name}…`; await tick();
+      const r = run(it.opt);
+      const pass = r.n >= OPT_RULES.minTrades && r.winRate >= OPT_RULES.minWin && r.avgR > OPT_RULES.minAvgR;
+      rows.push({ ...it, r, pass, h1: half(r, true), h2: half(r, false) });
+    }
+    // Bộ lọc dùng chung: chỉ bật nếu giúp kết quả tốt hơn trên tập điều kiện đạt chuẩn.
+    const keepOpt = (setups) => ({ setups, allowCorrective: setups.__corr, allowMomentum4H: setups.__m4h });
+    const chosen = rows.filter((x) => x.pass);
+    const setOn = { A: false, B: false, S1: false, S2: false, S3: false, __corr: false, __m4h: false };
+    for (const x of chosen) ({ solpha_setupA: () => (setOn.A = true), solpha_setupB: () => (setOn.B = true), solpha_setupS1: () => (setOn.S1 = true), solpha_setupS2: () => (setOn.S2 = true), solpha_setupS3: () => (setOn.S3 = true), solpha_corrective: () => (setOn.__corr = true), solpha_m4h: () => (setOn.__m4h = true) })[x.key]();
+    const filters = [];
+    if (chosen.some((x) => x.key !== "solpha_m4h")) {
+      for (const [key, name, field] of [["solpha_walk", "Cho vào khi 1H/4H bám dải", "allowBandWalk"], ["solpha_session", "Tránh giờ funding / tin / thanh khoản thấp", "sessionFilter"]]) {
+        out.textContent = `Đang đo bộ lọc: ${name}…`; await tick();
+        const on = run({ ...keepOpt(setOn), [field]: true }), off = run({ ...keepOpt(setOn), [field]: false });
+        filters.push({ key, name, on, off, keep: on.n && (!off.n || on.avgR >= off.avgR) });
+      }
+    }
+    optResult = { rows, filters, at: Date.now(), from: c5[0].t, to: c5[c5.length - 1].t };
+    const pct = (x) => Math.round(x * 100) + "%", r2 = (x) => (x == null ? "—" : (x >= 0 ? "+" : "") + fmt(x));
+    const day = (t) => new Date(t).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
+    const sorted = rows.slice().sort((a, b) => (b.pass - a.pass) || (b.r.winRate - a.r.winRate) || (b.r.avgR - a.r.avgR));
+    out.innerHTML = `<div class="muted">Dữ liệu ${day(optResult.from)} → ${day(optResult.to)} · đã trừ phí ${(SolphaSignals.DEFAULTS.feeRate * 100).toFixed(2)}%/lệnh · đạt chuẩn = ≥ ${OPT_RULES.minTrades} lệnh, thắng ≥ ${pct(OPT_RULES.minWin)}, R TB sau phí &gt; 0. "Nửa đầu / nửa sau" để xem có ổn định không.</div>
+      <div class="table-wrap"><table><thead><tr><th>Điều kiện</th><th>Lệnh</th><th>Thắng</th><th>R TB</th><th>Tổng R</th><th>Nửa đầu / sau</th><th>Kết luận</th></tr></thead><tbody>${sorted.map((x) =>
+        `<tr><td><b>${x.name}</b></td><td>${x.r.n}</td><td>${x.r.n ? pct(x.r.winRate) : "—"}</td><td class="${x.r.avgR >= 0 ? "up" : "down"}">${x.r.n ? r2(x.r.avgR) : "—"}</td><td>${r2(x.r.totalR)}R</td><td>${r2(x.h1)} / ${r2(x.h2)}</td><td>${x.pass ? '<span class="tag tang">GIỮ</span>' : '<span class="tag in">TẮT</span>'}</td></tr>`).join("")}</tbody></table></div>
+      ${filters.map((f) => `<div class="muted">${f.name}: bật ${f.on.n} lệnh, R TB ${r2(f.on.avgR)} · tắt ${f.off.n} lệnh, R TB ${r2(f.off.avgR)} → <b>${f.keep ? "BẬT" : "TẮT"}</b></div>`).join("")}
+      ${chosen.length ? `<div class="jactions"><button id="btnApplyOpt" class="btn primary">Áp dụng: chỉ giữ ${chosen.length} điều kiện đạt chuẩn</button></div>`
+        : `<div class="muted"><b>Không điều kiện nào đạt chuẩn trong 30 ngày qua</b> — giữ nguyên cài đặt hiện tại, không tự tắt hết.</div>`}`;
+    $("btnApplyOpt") && $("btnApplyOpt").addEventListener("click", () => {
+      for (const x of optResult.rows) store.set(x.key, x.pass ? "1" : "0");
+      for (const f of optResult.filters) store.set(f.key, f.keep ? "1" : "0");
+      store.set("solpha_opt_applied", JSON.stringify({ at: Date.now(), keep: optResult.rows.filter((x) => x.pass).map((x) => x.name) }));
+      for (const [id, key] of [["chkSetupA", "solpha_setupA"], ["chkSetupB", "solpha_setupB"], ["chkSetupS1", "solpha_setupS1"], ["chkSetupS2", "solpha_setupS2"], ["chkSetupS3", "solpha_setupS3"], ["chkCorrective", "solpha_corrective"], ["chkM4H", "solpha_m4h"], ["chkWalk", "solpha_walk"], ["chkSession", "solpha_session"]]) if ($(id)) $(id).checked = store.get(key, "1") === "1";
+      $("btnApplyOpt").textContent = "Đã áp dụng ✓"; $("btnApplyOpt").disabled = true;
+      fullScan("manual");
+    });
+  } catch (e) { out.textContent = "Lỗi tối ưu: " + (e.message || e); }
+  btn.disabled = false;
+});
+(function showLastOpt() {
+  let a = null; try { a = JSON.parse(store.get("solpha_opt_applied", "null")); } catch (_) {}
+  if (a && $("optBox")) $("optBox").innerHTML = `<div class="muted">Lần áp dụng gần nhất: ${new Date(a.at).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })} · đang giữ: ${a.keep.join(", ") || "—"}. Nên chạy lại mỗi tuần.</div>`;
+})();
