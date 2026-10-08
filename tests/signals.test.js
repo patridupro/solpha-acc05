@@ -61,5 +61,18 @@ console.log("signals.test.js: OK");
   const lg = em(Pu, m15u, Hm({ h4Dir: "tang", h1Dir: "tang", d1Dir: "tang" }));
   assert.strictEqual(lg.side, "long", "momentum long: " + lg.why.join(";")); assert.ok(!lg.d1Against);
   assert.strictEqual(em(Pu, m15u, Hm({ h4Dir: "tang", h1Dir: "tang" }), { m4hRsiMax: 10 }).side, null, "RSI quá mua phải chặn");
+  assert.strictEqual(S.DEFAULTS.m4hRsiMin, 10);
 }
 console.log("momentum 4H/1H: OK");
+
+// 5) 4H bám BB dưới (xu hướng giảm mạnh) không còn chặn cứng Short; 1D ở BB dưới vẫn chặn.
+{
+  const w = { ok: true }, bad = { ok: false, why: "RSI 4H 18 < 25" };
+  assert.strictEqual(ev(H({ chaseDown: ["4H"], walk4hShort: w })).side, "short", "4H bám dải phải cho short");
+  assert.strictEqual(ev(H({ chaseDown: ["4H"], walk4hShort: w })).plan.sizeFactor, 0.5, "4H bám dải → ½ khối lượng");
+  assert.strictEqual(ev(H({ chaseDown: ["4H"], walk4hShort: bad })).side, null, "4H quá đà phải chặn");
+  assert.strictEqual(ev(H({ chaseDown: ["1H", "4H"], walkShort: w, walk4hShort: w })).side, "short");
+  assert.strictEqual(ev(H({ chaseDown: ["1D"], walk4hShort: w })).side, null, "1D ở BB dưới luôn chặn");
+  assert.strictEqual(ev(H({ chaseDown: ["4H"], walk4hShort: w }), { allowBandWalk: false }).side, null);
+}
+console.log("4H band walk: OK");

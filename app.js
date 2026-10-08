@@ -117,6 +117,11 @@ async function loadTicker() {
     if (data && data.lastFundingRate != null) $("funding").textContent = (Number(data.lastFundingRate) * 100).toFixed(4) + "%";
   } catch (_) {}
 }
+async function loadKlinesUntil(interval, limit, endTime) {
+  const q = `symbol=SOLUSDT&interval=${interval}&limit=${limit}&endTime=${endTime}`;
+  const { data } = await withBase(`/api/v3/klines?${q.replace(`limit=${limit}`, `limit=${Math.min(limit, 1000)}`)}`, `/fapi/v1/klines?${q}`);
+  return data.map((k) => ({ t: k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5] }));
+}
 async function loadKlines(interval, limit = 220) {
   const { data } = await withBase(`/api/v3/klines?symbol=SOLUSDT&interval=${interval}&limit=${Math.min(limit, 1000)}`, `/fapi/v1/klines?symbol=SOLUSDT&interval=${interval}&limit=${limit}`);
   return data.map((k) => ({ t: k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5] }));
@@ -158,7 +163,7 @@ function sigOptions() {
   };
 }
 function htfContext(map, align) {
-  const h1 = map["1h"], P1 = SolphaSignals.prepare(h1.candles);
+  const h1 = map["1h"], P1 = SolphaSignals.prepare(h1.candles), P4 = SolphaSignals.prepare(map["4h"].candles);
   let h1RejectUpper = false;
   for (let j = h1.candles.length - 2; j >= h1.candles.length - 3; j--) if (P1.bb[j] && h1.candles[j].h >= P1.bb[j].upper) h1RejectUpper = true;
   return {
@@ -168,6 +173,8 @@ function htfContext(map, align) {
     chaseDown: ["1h", "4h", "1d"].filter((k) => map[k].band === "lower").map((k) => k.toUpperCase()),
     walkLong: SolphaSignals.bandWalk(P1, h1.candles.length - 2, "long", { ...SolphaSignals.DEFAULTS, ...sigOptions() }),
     walkShort: SolphaSignals.bandWalk(P1, h1.candles.length - 2, "short", { ...SolphaSignals.DEFAULTS, ...sigOptions() }),
+    walk4hLong: SolphaSignals.bandWalk(P4, map["4h"].candles.length - 2, "long", { ...SolphaSignals.DEFAULTS, ...sigOptions() }),
+    walk4hShort: SolphaSignals.bandWalk(P4, map["4h"].candles.length - 2, "short", { ...SolphaSignals.DEFAULTS, ...sigOptions() }),
     h1Upper: h1.bb && h1.bb.upper, h1Lower: h1.bb && h1.bb.lower, h1RejectUpper,
     m15Down: align.m15 === "giam",
     d1Dir: align.d1, h4Dir: align.h4, h1Dir: align.h1,
@@ -186,7 +193,7 @@ function candleTrigger(map, align) {
   // Momentum 4H/1H: không chờ 1D; 15M + 5M cùng hướng và cùng chạm BB (nến đã đóng).
   const j15 = map["15m"].candles.length - 2, c15 = map["15m"].candles[j15], b15 = P["15m"].bb[j15];
   const e9 = P["15m"].ema9[j15], e21 = P["15m"].ema21[j15];
-  const m15 = { dir: e9 > e21 ? "tang" : e9 < e21 ? "giam" : "sideway", touchLower: !!b15 && c15.l <= b15.lower, touchUpper: !!b15 && c15.h >= b15.upper };
+  const m15 = { dir: e9 > e21 ? "tang" : e9 < e21 ? "giam" : "sideway", ...SolphaSignals.touch15(P["15m"], j15) };
   rows.push({ key: "m4h", label: "4H/1H·5M+15M", ...SolphaSignals.evaluateMomentum(P["5m"], map["5m"].candles.length - 2, m15, htf, 5, opt) });
   return rows;
 }
@@ -514,3 +521,34 @@ $("btnBacktest").addEventListener("click", async () => {
   } catch (e) { out.textContent = "Lỗi backtest: " + (e.message || e); }
   btn.disabled = false;
 });
+
+// ---- Soi lại thời điểm: từng nến 5M quanh mốc anh chọn, app quyết định gì và vì sao ----
+(function initReplay() {
+  const inp = $("rpTime"), btn = $("btnReplay"), out = $("rpBox");
+  if (!inp) return;
+  const pad = (n) => String(n).padStart(2, "0");
+  // Ô nhập luôn hiểu là giờ Việt Nam (UTC+7), không phụ thuộc múi giờ của máy.
+  const VN = 7 * 3600000;
+  const d = new Date(Date.now() + VN - 3 * 3600000);
+  inp.value = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:00`;
+  const parseVN = (v) => { const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(v || ""); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) - VN : NaN; };
+  const arrow = (x) => (x === "tang" ? "↑" : x === "giam" ? "↓" : "–");
+  const hm = (t) => new Date(t).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" });
+  const cell = (r) => r.side ? `<span class="tag ${r.side === "long" ? "tang" : "giam"}">${r.side.toUpperCase()}${r.corrective ? " ĐC" : ""} ${r.setup}${r.momentum ? " ½" : ""}</span>` : `<span class="muted">${(r.why[0] || "—")}</span>`;
+  btn.addEventListener("click", async () => {
+    const T = parseVN(inp.value);
+    if (!Number.isFinite(T)) { out.textContent = "Chọn ngày giờ hợp lệ."; return; }
+    const from = T - 30 * 60000, to = Math.min(T + 3 * 3600000, Date.now() - 5 * 60000), end = to + 5 * 60000;
+    if (to <= from) { out.textContent = "Thời điểm này chưa có dữ liệu (ở tương lai hoặc vừa mới xảy ra)."; return; }
+    btn.disabled = true; out.textContent = "Đang tải dữ liệu Binance quanh thời điểm này…";
+    try {
+      const [c5, m15, h1, h4, d1] = await Promise.all([loadKlinesUntil("5m", 400, end), loadKlinesUntil("15m", 300, end), loadKlinesUntil("1h", 300, end), loadKlinesUntil("4h", 200, end), loadKlinesUntil("1d", 150, end)]);
+      const rows = SolphaSignals.replay(c5, h1, h4, d1, m15, from, to, sigOptions());
+      const hits = rows.filter((r) => r.main.side || r.mom.side);
+      out.innerHTML = `<div class="muted">${rows.length} nến 5M từ ${hm(from)} đến ${hm(to)} (giờ VN). ${hits.length ? "Có tín hiệu lúc: " + hits.map((r) => `<b>${hm(r.t)}</b> ${r.main.side ? r.main.side.toUpperCase() + " " + r.main.setup : ""}${r.mom.side ? " " + r.mom.side.toUpperCase() + " M4H" : ""}`).join(" · ") : "<b>Không có tín hiệu nào</b> — xem cột lý do bên dưới."} Bộ lọc funding không áp dụng khi xem lại.</div>
+        <div class="table-wrap rpwrap"><table><thead><tr><th>Giờ</th><th>Mở → Đóng</th><th>1D 4H 1H 15M</th><th>Bộ chính</th><th>Momentum 4H/1H</th></tr></thead><tbody>${rows.map((r) =>
+          `<tr class="${r.main.side || r.mom.side ? "rphit" : ""}"><td><b>${hm(r.t)}</b></td><td>${fmt(r.o)} → ${fmt(r.c)}</td><td>${arrow(r.dirs.d1)} ${arrow(r.dirs.h4)} ${arrow(r.dirs.h1)} ${arrow(r.dirs.m15)}</td><td>${cell(r.main)}</td><td>${cell(r.mom)}</td></tr>`).join("")}</tbody></table></div>`;
+    } catch (e) { out.textContent = "Lỗi tải dữ liệu: " + (e.message || e); }
+    btn.disabled = false;
+  });
+})();

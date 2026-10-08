@@ -6,6 +6,10 @@ PWA theo dõi SOL/USDT futures đa khung (5M, 15M, 1H, 4H, 1D), RSI / EMA / Boll
 
 https://solpha.pages.dev — Cloudflare Pages build từ nhánh `claude/intelligent-lamport-vrk29w` của repo này (1 build mỗi lần push). Đường dẫn trong app đều tương đối nên vẫn chạy được nếu sau này chuyển sang GitHub Pages/Netlify.
 
+## Soi lại thời điểm
+
+Trong ô Nến tín hiệu: chọn ngày giờ → **Soi lại 3 giờ**. App tải dữ liệu Binance quanh mốc đó và liệt kê từng nến 5M: hướng 1D/4H/1H/15M, quyết định của bộ chính và của Momentum 4H/1H, kèm lý do. Bộ lọc funding không áp dụng khi xem lại.
+
 ## Kiểm tra
 
 `node tests/signals.test.js` — kiểm tra tham số mặc định và các tình huống Short/Short điều chỉnh chính. Chạy trước mỗi lần push.
@@ -46,7 +50,7 @@ Xem [`docs/PWA-DEPLOY-GUIDE.md`](docs/PWA-DEPLOY-GUIDE.md) (bản PDF: `docs/PWA
 - Đồng pha = 1D + 4H + 1H cùng hướng EMA9/21, 15M không ngược mạnh. MACD(12,26,9) chỉ hiển thị để tham khảo (đã bỏ khỏi điều kiện vì làm lỡ nhiều cơ hội).
 - Cảnh báo khi đồng pha và chạm BB trên ≥2 khung, có ≥1 khung ≥1H.
 - Nến tín hiệu (nến **đã đóng** 5M/15M, quét ngay sau mỗi mốc 5 phút) — bộ máy trong `signals.js`, dùng chung cho quét trực tiếp và backtest:
-  - Xu hướng: EMA 1D/4H/1H cùng hướng. 4H/1D ở BB trên (Long) / BB dưới (Short) = chase, chặn.
+  - Xu hướng: EMA 1D/4H/1H cùng hướng. 1D ở dải ngoài = chase, luôn chặn; **1H/4H ở dải ngoài chỉ cho vào khi khung đó đang bám dải** (½ khối lượng).
   - 1H ở dải ngoài **vẫn cho vào nếu đang bám dải**: BB 1H mở rộng so với 3 nến trước, RSI 1H ≤ 75 (Long) / ≥ 25 (Short), giá không vượt dải quá 0.5 ATR → lệnh **Momentum, ½ khối lượng**. Tắt được trong Cài đặt; backtest có dòng "chặn cứng 1H BB" để so sánh.
   - Nến: range 1.3–3 × ATR(14), đóng ở 25% trên (Long) / dưới (Short); volume ≥ 1.5 × TB20; RSI ≤ 75 (Long) / ≥ 25 (Short).
   - **Setup A** (pullback): trong 6 nến đã chạm BB mid, nến tín hiệu đóng lại trên (dưới) mid; cách EMA21 ≤ 1.5 ATR.
@@ -58,7 +62,7 @@ Xem [`docs/PWA-DEPLOY-GUIDE.md`](docs/PWA-DEPLOY-GUIDE.md) (bản PDF: `docs/PWA
     - Không Short khi: funding ≤ −0.03%/8h, RSI 1H < 25, vừa có nến > 3×ATR (so với ATR trước nến đó), 4H/1D ở BB dưới; 1H ở BB dưới chỉ cho khi đang bám dải (½ khối lượng).
     - SL = đỉnh nhịp hồi + 0.3 ATR (S2: đỉnh nến + 0.3 ATR), bỏ nếu rủi ro > 2.5 ATR. TP1 = 1.5R **chốt ½** + dời SL về giá vào, TP2 = 3R hoặc BB dưới 1H. **Quá 2 giờ chưa TP1 thì thoát.**
   - **Short điều chỉnh**: 1D còn tăng nhưng giá đóng dưới BB mid 1D, 4H/1H/15M giảm → chỉ S1/S3, **½ khối lượng**, TP2 không vượt BB dưới 1D (bỏ lệnh nếu TP1 đã vượt). Tắt được trong Cài đặt.
-  - **Momentum 4H/1H** (không chờ 1D): 4H + 1H cùng hướng EMA, 15M + 5M cùng hướng và nến đã đóng của cả hai **cùng chạm BB dưới → SHORT** / **BB trên → LONG**. ½ khối lượng; bỏ qua khi RSI 5M < 20 (Short) / > 80 (Long), vừa có nến > 3×ATR, funding quá âm (Short), giờ nhiễu. SL = max(đỉnh nến, EMA9 5M) + 0.3 ATR (Long ngược lại), tối đa 2 ATR; TP1 1.5R chốt ½, TP2 3R; quá 1 giờ chưa TP1 thì thoát. Cảnh báo ghi "ngược 1D" khi 1D đi ngược chiều. Tắt được trong Cài đặt.
+  - **Momentum 4H/1H** (không chờ 1D): 4H + 1H cùng hướng EMA, 15M + 5M cùng hướng và nến đã đóng của cả hai **cùng chạm BB dưới → SHORT** / **BB trên → LONG**. ½ khối lượng; "cùng chạm" tính trong 30 phút gần nhất (2 nến 15M, 2 nến 5M) và nến 5M vừa đóng vẫn ở phía yếu của BB mid; bỏ qua khi RSI 5M < 10 (Short) / > 90 (Long), chính nến tín hiệu > 3×ATR, funding quá âm (Short), giờ nhiễu. SL = max(đỉnh nến, EMA9 5M) nhưng không quá đỉnh nến + 1 ATR, cộng 0.3 ATR (Long ngược lại), rủi ro tối đa 2 ATR; TP1 1.5R chốt ½, TP2 3R; quá 1 giờ chưa TP1 thì thoát. Cảnh báo ghi "ngược 1D" khi 1D đi ngược chiều. Tắt được trong Cài đặt.
   - Backtest tách Long/Short và từng setup, kèm "lý do bị loại nhiều nhất". Backtest Short bỏ qua bộ lọc funding (Binance không trả funding lịch sử theo nến).
   - Bộ cũ (range ≥ $0.55) vẫn chọn được trong Cài đặt. Nút **Backtest** so 4 bộ trên ~1.500 nến 5M thật (vào ở giá đóng, chốt 1.5R, tối đa 4 giờ, nến chạm cả SL/TP tính thua, chưa tính phí).
 

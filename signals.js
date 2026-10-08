@@ -22,7 +22,7 @@
     sMinATR: 1.2, sVol: 1.3, s2MinATR: 1.3, s2Vol: 1.5, s2Lookback: 12, sBounceLookback: 6,
     sSlATR: 0.3, sMaxRiskATR: 2.5, s2RsiMin: 20,
     sCrashATR: 3, sH1RsiMin: 25, fundingMin: -0.0003, sTimeStopBars: 24,
-    allowMomentum4H: true, m4hRsiMin: 20, m4hRsiMax: 80, m4hSlATR: 0.3, m4hMaxRiskATR: 2, m4hTimeStopBars: 12,
+    allowMomentum4H: true, m4hRsiMin: 10, m4hRsiMax: 90, m4hSlATR: 0.3, m4hMaxRiskATR: 2, m4hTimeStopBars: 12,
     allowCorrective: true, shortRegime: "all" // shortRegime: "all" | "trend" | "corrective" (dùng cho backtest)
   };
 
@@ -84,6 +84,18 @@
     return null;
   }
 
+  // Giá ở dải ngoài khung lớn: 1D luôn chặn; 1H/4H được miễn nếu khung đó đang "bám dải" (xu hướng mạnh thật).
+  function chaseCheck(chase, dir, htf, o) {
+    const band = dir === "long" ? "BB trên" : "BB dưới";
+    if (chase.includes("1D")) return { ok: false, why: `đang chase ${band} (${chase.join(",")})` };
+    if (!o.allowBandWalk) return { ok: false, why: `đang chase ${band} (${chase.join(",")})` };
+    const walks = { "1H": dir === "long" ? htf.walkLong : htf.walkShort, "4H": dir === "long" ? htf.walk4hLong : htf.walk4hShort };
+    for (const tf of chase) {
+      const w = walks[tf];
+      if (!w || !w.ok) return { ok: false, why: `${tf} ở ${band} nhưng quá đà${w && w.why ? ": " + w.why : ""}` };
+    }
+    return { ok: true };
+  }
   // Bám dải 1H: dải đang mở rộng (so với 3 nến trước), RSI chưa cực đoan, giá không vọt xa khỏi dải.
   function bandWalk(P1, idx, side, o) {
     const bb = P1.bb[idx], prev = P1.bb[idx - 3], rsi = P1.rsi[idx], atr = P1.atr[idx], c = P1.closes[idx];
@@ -119,15 +131,9 @@
     if (dir === "short" && !htf.down) { res.why.push("1D/4H/1H chưa cùng giảm"); return res; }
     // Chase: 4H/1D ở dải ngoài luôn chặn; riêng 1H được miễn nếu đang bám dải (lệnh Momentum, ½ khối lượng).
     const chase = dir === "long" ? (htf.chaseUp || []) : (htf.chaseDown || []);
-    const walk = dir === "long" ? htf.walkLong : htf.walkShort;
     if (chase.length) {
-      const onlyH1 = chase.length === 1 && chase[0] === "1H";
-      if (onlyH1 && o.allowBandWalk && walk && walk.ok) res.momentum = true;
-      else {
-        const band = dir === "long" ? "BB trên" : "BB dưới";
-        res.why.push(onlyH1 && o.allowBandWalk && walk ? `1H ở ${band} nhưng quá đà: ${walk.why}` : `đang chase ${band} (${chase.join(",")})`);
-        return res;
-      }
+      const c = chaseCheck(chase, dir, htf, o);
+      if (c.ok) res.momentum = true; else { res.why.push(c.why); return res; }
     }
 
     if (o.rule === "fixed") {
@@ -209,9 +215,8 @@
     if (htf.h1Rsi != null && htf.h1Rsi < o.sH1RsiMin) return no(`RSI 1H ${htf.h1Rsi.toFixed(0)} < ${o.sH1RsiMin} (quá bán)`);
     for (let j = i - 3; j < i; j++) { const x = P.candles[j], a = P.atr[j - 1]; if (a && x.h - x.l > o.sCrashATR * a) return no("vừa có cú sập lớn, chờ hồi"); } // so với ATR trước nến sập
     const chase = htf.chaseDown || [];
-    if (chase.some((x) => x !== "1H")) return no(`đang chase BB dưới (${chase.join(",")})`);
-    const h1AtLower = chase.includes("1H");
-    if (h1AtLower && !(o.allowBandWalk && htf.walkShort && htf.walkShort.ok)) return no(`1H ở BB dưới nhưng quá đà${htf.walkShort ? ": " + htf.walkShort.why : ""}`);
+    if (chase.length) { const c = chaseCheck(chase, "short", htf, o); if (!c.ok) return no(c.why); }
+    const h1AtLower = chase.length > 0; // đang bám dải 1H/4H → ½ khối lượng
     // Nhịp hồi trong 6 nến trước nến tín hiệu
     const prev = P.candles.slice(i - o.sBounceLookback, i);
     const bounceHigh = Math.max(...prev.map((x) => x.h), k.h);
@@ -276,15 +281,18 @@
     const want = htfSide === "short" ? "giam" : "tang";
     if (m15.dir !== want) return no(`15M chưa ${want === "giam" ? "giảm" : "tăng"}`);
     if (dir5 !== want) return no(`5M chưa ${want === "giam" ? "giảm" : "tăng"}`);
-    const t5 = htfSide === "short" ? k.l <= bb.lower : k.h >= bb.upper;
+    // "Cùng chạm" = trong 30 phút gần nhất: 5M chạm ở 1 trong 2 nến gần nhất (15M tương tự, xem m15Info),
+    // và nến 5M vừa đóng vẫn ở phía yếu của BB mid (đà chưa bị bẻ gãy).
+    const t5 = [i, i - 1].some((j) => P.bb[j] && (htfSide === "short" ? P.candles[j].l <= P.bb[j].lower : P.candles[j].h >= P.bb[j].upper));
     const t15 = htfSide === "short" ? m15.touchLower : m15.touchUpper;
     const band = htfSide === "short" ? "BB dưới" : "BB trên";
     if (!t5 && !t15) return no(`5M và 15M chưa chạm ${band}`);
     if (!t5) return no(`5M chưa chạm ${band}`);
     if (!t15) return no(`15M chưa chạm ${band}`);
+    if (htfSide === "short" ? k.c >= bb.mid : k.c <= bb.mid) return no("5M đã hồi qua BB mid");
     // Chốt an toàn tối thiểu
     if (res.atrMult > o.atrMax) return no(`nến quá lớn ${res.atrMult.toFixed(1)}×ATR (tin/thanh lý)`);
-    for (let j = i - 3; j < i; j++) { const x = P.candles[j], a = P.atr[j - 1]; if (a && x.h - x.l > o.sCrashATR * a) return no("vừa có nến > 3×ATR, chờ ổn định"); }
+    // Momentum vào giữa cú chạy mạnh: nến lớn trước đó là bình thường → không chặn; chỉ bỏ khi chính nến tín hiệu > 3×ATR.
     if (htfSide === "short" && rsi < o.m4hRsiMin) return no(`RSI 5M ${rsi.toFixed(0)} < ${o.m4hRsiMin} (quá bán cực độ)`);
     if (htfSide === "long" && rsi > o.m4hRsiMax) return no(`RSI 5M ${rsi.toFixed(0)} > ${o.m4hRsiMax} (quá mua cực độ)`);
     if (htfSide === "short" && htf.funding != null && htf.funding <= o.fundingMin) return no(`funding ${(htf.funding * 100).toFixed(3)}% quá âm`);
@@ -292,7 +300,8 @@
     // Kế hoạch: vào 3 phần (giá đóng / hồi 1/3 nến / hồi 0.25 ATR nữa).
     // SL: lệnh theo đà gãy khi giá lấy lại EMA9 5M → SL = max(đỉnh nến, EMA9) + 0.3 ATR (Long: min(đáy, EMA9) − 0.3 ATR).
     const sgn = htfSide === "long" ? 1 : -1;
-    const sl = htfSide === "short" ? Math.max(k.h, e9) + o.m4hSlATR * atr : Math.min(k.l, e9) - o.m4hSlATR * atr;
+    // Giá rơi/tăng nhanh làm EMA9 tụt xa → giới hạn mốc SL không quá 1 ATR ngoài đỉnh/đáy nến tín hiệu.
+    const sl = htfSide === "short" ? Math.min(Math.max(k.h, e9), k.h + atr) + o.m4hSlATR * atr : Math.max(Math.min(k.l, e9), k.l - atr) - o.m4hSlATR * atr;
     const e1 = k.c, e2 = k.c - sgn * range / 3;
     let e3 = e2 - sgn * 0.25 * atr;
     if (sgn * (e3 - sl) <= 0) e3 = (e2 + sl) / 2;
@@ -332,6 +341,49 @@
     };
   }
 
+  // Ngữ cảnh khung lớn tại thời điểm t (chỉ dùng nến khung lớn đã đóng trước t) — dùng chung cho backtest và soi lại.
+  function htfAt(L1, L4, LD, L15, tClose, o) {
+    const a = L1(tClose), b = L4(tClose), d = LD(tClose);
+    if (!a || !b || !d) return null;
+    const chaseUp = [["1H", a], ["4H", b], ["1D", d]].filter(([, x]) => x.bb && x.bb.pctB >= 0.95).map(([n]) => n);
+    const chaseDown = [["1H", a], ["4H", b], ["1D", d]].filter(([, x]) => x.bb && x.bb.pctB <= 0.05).map(([n]) => n);
+    let h1RejectUpper = false;
+    for (let j = a.idx; j >= a.idx - 1; j--) if (a.P.bb[j] && a.P.candles[j].h >= a.P.bb[j].upper) h1RejectUpper = true;
+    const q = L15 && L15(tClose);
+    const htf = { up: a.dir === "tang" && b.dir === "tang" && d.dir === "tang", down: a.dir === "giam" && b.dir === "giam" && d.dir === "giam", chaseUp, chaseDown,
+      walkLong: bandWalk(a.P, a.idx, "long", o), walkShort: bandWalk(a.P, a.idx, "short", o),
+      walk4hLong: bandWalk(b.P, b.idx, "long", o), walk4hShort: bandWalk(b.P, b.idx, "short", o),
+      h1Upper: a.bb && a.bb.upper, h1Lower: a.bb && a.bb.lower, h1RejectUpper,
+      d1Dir: d.dir, h4Dir: b.dir, h1Dir: a.dir, d1Mid: d.bb && d.bb.mid, d1Lower: d.bb && d.bb.lower,
+      m15Down: q ? q.dir === "giam" : undefined, m15Dir: q ? q.dir : undefined,
+      h1Close: a.P.closes[a.idx], h1Ema21: a.P.ema21[a.idx], h1Rsi: a.P.rsi[a.idx],
+      funding: null }; // Binance không trả funding lịch sử theo nến → bỏ qua bộ lọc funding khi xem lại quá khứ
+    return { htf, q };
+  }
+  // 15M "chạm" nếu 1 trong 2 nến 15M đã đóng gần nhất chạm dải.
+  const touch15 = (P15, idx) => {
+    const js = [idx, idx - 1].filter((j) => j >= 0 && P15.bb[j]);
+    return { touchLower: js.some((j) => P15.candles[j].l <= P15.bb[j].lower), touchUpper: js.some((j) => P15.candles[j].h >= P15.bb[j].upper) };
+  };
+  const m15Info = (q) => ({ dir: q.dir, ...touch15(q.P, q.idx) });
+
+  // Soi lại: với từng nến 5M đã đóng trong [from, to], app sẽ quyết định gì và vì sao.
+  function replay(c5, h1, h4, d1, m15, from, to, opt) {
+    const P = prepare(c5), L1 = htfLookup(h1, 60), L4 = htfLookup(h4, 240), LD = htfLookup(d1, 1440), L15 = htfLookup(m15, 15);
+    const o = { ...DEFAULTS, ...opt }, rows = [];
+    for (let i = 100; i < c5.length; i++) {
+      const tClose = c5[i].t + 5 * 60000;
+      if (c5[i].t < from || c5[i].t > to) continue;
+      const ctx = htfAt(L1, L4, LD, L15, tClose, o);
+      if (!ctx) continue;
+      const main = evaluate(P, i, ctx.htf, 5, o);
+      const mom = ctx.q ? evaluateMomentum(P, i, m15Info(ctx.q), ctx.htf, 5, o) : { side: null, why: ["thiếu 15M"] };
+      rows.push({ t: c5[i].t, o: c5[i].o, h: c5[i].h, l: c5[i].l, c: c5[i].c, main, mom,
+        dirs: { d1: ctx.htf.d1Dir, h4: ctx.htf.h4Dir, h1: ctx.htf.h1Dir, m15: ctx.htf.m15Dir }, chaseDown: ctx.htf.chaseDown, chaseUp: ctx.htf.chaseUp });
+    }
+    return rows;
+  }
+
   function backtest(c5, h1, h4, d1, opt, tfMinutes = 5, m15 = null) {
     const P = prepare(c5), L1 = htfLookup(h1, 60), L4 = htfLookup(h4, 240), LD = htfLookup(d1, 1440), L15 = m15 ? htfLookup(m15, 15) : null;
     const o = { ...DEFAULTS, ...opt };
@@ -340,25 +392,13 @@
     for (let i = 100; i < c5.length - 1; i++) {
       if (i <= busyUntil) continue; // không chồng lệnh
       const tClose = c5[i].t + tfMinutes * 60000;
-      const a = L1(tClose), b = L4(tClose), d = LD(tClose);
-      if (!a || !b || !d) continue;
-      const chaseUp = [["1H", a], ["4H", b], ["1D", d]].filter(([, x]) => x.bb && x.bb.pctB >= 0.95).map(([n]) => n);
-      const chaseDown = [["1H", a], ["4H", b], ["1D", d]].filter(([, x]) => x.bb && x.bb.pctB <= 0.05).map(([n]) => n);
-      const walkLong = bandWalk(a.P, a.idx, "long", o), walkShort = bandWalk(a.P, a.idx, "short", o);
-      let h1RejectUpper = false;
-      for (let j = a.idx; j >= a.idx - 1; j--) if (a.P.bb[j] && a.P.candles[j].h >= a.P.bb[j].upper) h1RejectUpper = true;
-      const htf = { up: a.dir === "tang" && b.dir === "tang" && d.dir === "tang", down: a.dir === "giam" && b.dir === "giam" && d.dir === "giam", chaseUp, chaseDown, walkLong, walkShort, h1Upper: a.bb && a.bb.upper, h1Lower: a.bb && a.bb.lower, h1RejectUpper,
-        d1Dir: d.dir, h4Dir: b.dir, h1Dir: a.dir, d1Mid: d.bb && d.bb.mid, d1Lower: d.bb && d.bb.lower };
-      const q = L15 && L15(tClose);
-      htf.m15Down = q ? q.dir === "giam" : undefined;
-      htf.h1Close = a.P.closes[a.idx]; htf.h1Ema21 = a.P.ema21[a.idx]; htf.h1Rsi = a.P.rsi[a.idx];
-      htf.funding = null; // Binance không trả funding lịch sử theo nến → backtest bỏ qua bộ lọc funding
+      const ctx = htfAt(L1, L4, LD, L15, tClose, o);
+      if (!ctx) continue;
+      const { htf, q } = ctx;
       let sig;
       if (o.engine === "m4h") {
         if (!q) continue;
-        const qc = q.P.candles[q.idx], qb = q.P.bb[q.idx];
-        htf.h4Dir = b.dir; htf.h1Dir = a.dir; htf.d1Dir = d.dir;
-        sig = evaluateMomentum(P, i, { dir: q.dir, touchLower: !!qb && qc.l <= qb.lower, touchUpper: !!qb && qc.h >= qb.upper }, htf, tfMinutes, o);
+        sig = evaluateMomentum(P, i, m15Info(q), htf, tfMinutes, o);
       } else sig = evaluate(P, i, htf, tfMinutes, o);
       if (!sig.side) {
         // Chỉ đếm nến có hướng phù hợp (Long: đóng nửa trên; Short: đóng nửa dưới) để biết điều kiện nào chặn nhiều nhất.
@@ -381,6 +421,6 @@
       from: c5[100] && c5[100].t, to: c5[c5.length - 1] && c5[c5.length - 1].t };
   }
 
-  const api = { DEFAULTS, prepare, evaluate, evaluateMomentum, outcome, backtest, sessionBlock, bandWalk, atrArr, emaArr, rsiArr, bbArr };
+  const api = { DEFAULTS, prepare, evaluate, evaluateMomentum, touch15, outcome, backtest, replay, sessionBlock, bandWalk, atrArr, emaArr, rsiArr, bbArr };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.SolphaSignals = api;
 })(this);
