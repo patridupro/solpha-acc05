@@ -58,9 +58,7 @@ console.log("signals.test.js: OK");
   assert.strictEqual(em(Pd, { ...m15d, dir: "tang" }, Hm({})).side, null, "15M ngược phải chặn");
   assert.strictEqual(em(Pd, m15d, Hm({ funding: -0.0005 })).side, null, "funding quá âm phải chặn");
   assert.strictEqual(em(Pd, m15d, Hm({}), { allowMomentum4H: false }).side, null, "tắt chế độ phải chặn");
-  const lg = em(Pu, m15u, Hm({ h4Dir: "tang", h1Dir: "tang", d1Dir: "tang" }));
-  assert.strictEqual(lg.side, "long", "momentum long: " + lg.why.join(";")); assert.ok(!lg.d1Against);
-  assert.strictEqual(em(Pu, m15u, Hm({ h4Dir: "tang", h1Dir: "tang" }), { m4hRsiMax: 10 }).side, null, "RSI quá mua phải chặn");
+  assert.strictEqual(em(Pu, m15u, Hm({ h4Dir: "tang", h1Dir: "tang" })).side, null, "momentum chỉ dùng cho short");
   assert.strictEqual(S.DEFAULTS.m4hRsiMin, 10);
 }
 console.log("momentum 4H/1H: OK");

@@ -276,8 +276,9 @@
     const range = k.h - k.l; res.range = range; res.atrMult = range / atr; res.pos = range > 0 ? (k.c - k.l) / range : 0.5;
     const volAvg = sma(P.vol.slice(i - 20, i)); res.volMult = volAvg ? k.v / volAvg : 0;
     const dir5 = e9 > e21 ? "tang" : e9 < e21 ? "giam" : "sideway";
-    const htfSide = htf.h4Dir === "giam" && htf.h1Dir === "giam" ? "short" : htf.h4Dir === "tang" && htf.h1Dir === "tang" ? "long" : null;
-    if (!htfSide) return no("4H/1H chưa cùng hướng");
+    // Chỉ dùng cho SHORT: 4H + 1H giảm, 5M + 15M cùng chạm BB dưới.
+    if (!(htf.h4Dir === "giam" && htf.h1Dir === "giam")) return no("4H/1H chưa cùng giảm");
+    const htfSide = "short";
     const want = htfSide === "short" ? "giam" : "tang";
     if (m15.dir !== want) return no(`15M chưa ${want === "giam" ? "giảm" : "tăng"}`);
     if (dir5 !== want) return no(`5M chưa ${want === "giam" ? "giảm" : "tăng"}`);

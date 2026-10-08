@@ -505,7 +505,6 @@ $("btnBacktest").addEventListener("click", async () => {
       ["SHORT S1 + S2 + S3 (tất cả)", { ...base, rule: "atr", only: "short", setups: { S1: true, S2: true, S3: true } }],
       ["SHORT thuận xu hướng", { ...base, rule: "atr", only: "short", shortRegime: "trend" }],
       ["SHORT điều chỉnh (1D còn tăng)", { ...base, rule: "atr", only: "short", shortRegime: "corrective", allowCorrective: true }],
-      ["MOMENTUM 4H/1H · LONG", { ...base, engine: "m4h", only: "long", allowMomentum4H: true }],
       ["MOMENTUM 4H/1H · SHORT", { ...base, engine: "m4h", only: "short", allowMomentum4H: true }],
       ["SHORT chỉ S1 (hồi bị từ chối)", { ...base, rule: "atr", only: "short", setups: { S1: true, S2: false, S3: false } }],
       ["SHORT chỉ S2 (thủng đáy)", { ...base, rule: "atr", only: "short", setups: { S1: false, S2: true, S3: false } }],
@@ -516,7 +515,7 @@ $("btnBacktest").addEventListener("click", async () => {
     out.innerHTML = `<div class="muted">Từ ${day(r0.from)} đến ${day(r0.to)} · vào ở giá đóng nến, chốt ở 1.5R; Long tối đa 4 giờ, Short tối đa 2 giờ. Nến chạm cả SL và TP tính là thua. Backtest Short bỏ qua bộ lọc funding (không có dữ liệu lịch sử).</div>
       <div class="table-wrap"><table><thead><tr><th>Bộ điều kiện</th><th>Số lệnh</th><th>Thắng</th><th>R TB/lệnh</th><th>Tổng R</th><th>Sụt tối đa</th></tr></thead><tbody>${rows.map(([n, r]) =>
         `<tr><td><b>${n}</b></td><td>${r.n}</td><td>${r.n ? Math.round(r.winRate * 100) + "%" : "—"}</td><td class="${r.avgR >= 0 ? "up" : "down"}">${r.n ? (r.avgR >= 0 ? "+" : "") + fmt(r.avgR) : "—"}</td><td class="${r.totalR >= 0 ? "up" : "down"}">${(r.totalR >= 0 ? "+" : "") + fmt(r.totalR, 1)}R</td><td>${fmt(r.maxDD, 1)}R</td></tr>`).join("")}</tbody></table></div>
-      ${[["LONG", rows[1][1]], ["SHORT", rows[5][1]], ["SHORT điều chỉnh", rows[7][1]], ["MOMENTUM 4H/1H SHORT", rows[9][1]]].map(([n, r]) => r.topWhy && r.topWhy.length ? `<div class="muted"><b>${n}</b> bị loại nhiều nhất vì: ${r.topWhy.slice(0, 3).map(([w, c]) => `${w.replace(/#/g, "x")} (${c})`).join(" · ")}</div>` : "").join("")}
+      ${[["LONG", rows[1][1]], ["SHORT", rows[5][1]], ["SHORT điều chỉnh", rows[7][1]], ["MOMENTUM 4H/1H SHORT", rows[8][1]]].map(([n, r]) => r.topWhy && r.topWhy.length ? `<div class="muted"><b>${n}</b> bị loại nhiều nhất vì: ${r.topWhy.slice(0, 3).map(([w, c]) => `${w.replace(/#/g, "x")} (${c})`).join(" · ")}</div>` : "").join("")}
       <div class="muted">Khoảng 5 ngày là mẫu nhỏ — chạy lại mỗi tuần và chỉ tin khi xu hướng lặp lại. Chưa tính phí giao dịch và trượt giá.</div>`;
   } catch (e) { out.textContent = "Lỗi backtest: " + (e.message || e); }
   btn.disabled = false;
