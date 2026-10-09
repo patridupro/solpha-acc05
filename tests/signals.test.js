@@ -46,7 +46,7 @@ console.log("signals.test.js: OK");
     return S.prepare(s);
   };
   const Pd = mkSeries(-1), Pu = mkSeries(1, 0.012);
-  const Hm = (x) => ({ h4Dir: "giam", h1Dir: "giam", d1Dir: "tang", funding: 0.0001, ...x });
+  const Hm = (x) => ({ h4Dir: "giam", h1Dir: "giam", d1Dir: "tang", funding: 0.0001, h1TouchLower: true, h4TouchLower: true, ...x });
   const m15d = { dir: "giam", touchLower: true, touchUpper: false }, m15u = { dir: "tang", touchLower: false, touchUpper: true };
   const em = (P, m, h, o) => S.evaluateMomentum(P, j, m, h, 5, o || {});
   const sh = em(Pd, m15d, Hm({}));
@@ -54,6 +54,17 @@ console.log("signals.test.js: OK");
   assert.ok(sh.plan.sl > sh.plan.entry && sh.plan.tp1 < sh.plan.entry);
   assert.strictEqual(sh.plan.timeStopBars, 12);
   assert.strictEqual(em(Pd, m15d, Hm({ h4Dir: "tang" })).side, null, "4H ngược phải chặn");
+  assert.strictEqual(em(Pd, m15d, Hm({ h4TouchLower: false })).side, null, "4H chưa chạm BB dưới phải chặn");
+  assert.strictEqual(em(Pd, m15d, Hm({ h1TouchLower: false })).side, null, "1H chưa chạm BB dưới phải chặn");
+  {
+    // Nến 5M xanh (đóng > mở) ở BB dưới — đúng tình huống 17:55 (109.50 → 109.70) — không được báo short.
+    const c = Pd.candles.slice(); const b = Pd.bb[j - 1];
+    c[j] = { ...c[j], o: b.lower - 0.25, l: b.lower - 0.3, h: b.lower + 0.02, c: b.lower - 0.05 };
+    const Pg = S.prepare(c);
+    const g = em(Pg, m15d, Hm({}));
+    assert.strictEqual(g.side, null, "nến xanh phải chặn: " + g.why.join(";"));
+    assert.ok(/xanh|BB mid|đóng cao/.test(g.why[0]), g.why[0]);
+  }
   assert.strictEqual(em(Pd, { ...m15d, touchLower: false }, Hm({})).side, null, "15M chưa chạm BB dưới phải chặn");
   assert.strictEqual(em(Pd, { ...m15d, dir: "tang" }, Hm({})).side, null, "15M ngược phải chặn");
   assert.strictEqual(em(Pd, m15d, Hm({ funding: -0.0005 })).side, null, "funding quá âm phải chặn");
@@ -96,3 +107,12 @@ console.log("4H band walk: OK");
   assert.strictEqual(S.trendDir(115, 117, 116, 116.5), "sideway", "giá dưới EMA21 nhưng EMA9 còn trên và đang lên → đi ngang");
 }
 console.log("trendDir 1D: OK");
+
+// 7) Chạm BB dưới của khung lớn tính cả nến đang chạy
+{
+  const c = Array.from({ length: 60 }, (_, x) => { const p = 120 - x * 0.05 + Math.sin(x) * 0.3; return { t: x, o: p, h: p + 0.2, l: p - 0.2, c: p, v: 1 }; });
+  const P = S.prepare(c), idx = 58, lower = P.bb[idx].lower;
+  assert.strictEqual(S.touchLowerHTF(P, idx, lower - 0.01), true, "nến đang chạy xuống dưới dải = chạm");
+  assert.strictEqual(S.touchLowerHTF(P, idx, lower + 5) , [idx, idx - 1].some((j) => c[j].l <= P.bb[j].lower));
+}
+console.log("4H/1H chạm BB dưới + nến giảm: OK");

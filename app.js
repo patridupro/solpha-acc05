@@ -174,6 +174,9 @@ function htfContext(map, align) {
     walk1dShort: SolphaSignals.bandWalk(PD, map["1d"].candles.length - 2, "short", { ...SolphaSignals.DEFAULTS, ...sigOptions() }),
     h1Upper: h1.bb && h1.bb.upper, h1Lower: h1.bb && h1.bb.lower, h1RejectUpper,
     m15Down: align.m15 === "giam",
+    // 4H/1H chạm BB dưới: 2 nến đã đóng gần nhất, hoặc nến đang chạy đã xuống dưới dải.
+    h1TouchLower: SolphaSignals.touchLowerHTF(P1, h1.candles.length - 2, h1.candles[h1.candles.length - 1].l),
+    h4TouchLower: SolphaSignals.touchLowerHTF(P4, map["4h"].candles.length - 2, map["4h"].candles[map["4h"].candles.length - 1].l),
     d1Dir: align.d1, h4Dir: align.h4, h1Dir: align.h1,
     d1Mid: map["1d"].bb && map["1d"].bb.mid, d1Lower: map["1d"].bb && map["1d"].bb.lower,
     h1Close: h1.candles[h1.candles.length - 2].c, h1Ema21: P1.ema21[h1.candles.length - 2], h1Rsi: P1.rsi[h1.candles.length - 2],

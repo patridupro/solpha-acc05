@@ -287,6 +287,10 @@
     const dir5 = trendDir(k.c, e9, P.ema9[i - 3], e21);
     // Chỉ dùng cho SHORT: 4H + 1H giảm, 5M + 15M cùng chạm BB dưới.
     if (!(htf.h4Dir === "giam" && htf.h1Dir === "giam")) return no("4H/1H chưa cùng giảm");
+    // 4H và 1H phải đang CHẠM / BÁM BB dưới — chỉ "đang giảm" mà giá còn xa dải thì chưa phải lúc short theo đà.
+    if (!htf.h4TouchLower && !htf.h1TouchLower) return no("4H và 1H chưa chạm BB dưới");
+    if (!htf.h4TouchLower) return no("4H chưa chạm BB dưới");
+    if (!htf.h1TouchLower) return no("1H chưa chạm BB dưới");
     const htfSide = "short";
     const want = htfSide === "short" ? "giam" : "tang";
     if (m15.dir !== want) return no(`15M chưa ${want === "giam" ? "giảm" : "tăng"}`);
@@ -300,6 +304,9 @@
     if (!t5) return no(`5M chưa chạm ${band}`);
     if (!t15) return no(`15M chưa chạm ${band}`);
     if (htfSide === "short" ? k.c >= bb.mid : k.c <= bb.mid) return no("5M đã hồi qua BB mid");
+    // Nến 5M tín hiệu phải là nến GIẢM, đóng ở 40% dưới — không short trên nến xanh / nến rút chân.
+    if (k.c >= k.o) return no("nến 5M đóng xanh (chưa có lực bán)");
+    if (res.pos > 0.4) return no(`nến 5M đóng cao (${Math.round(res.pos * 100)}%)`);
     // Chốt an toàn tối thiểu
     if (res.atrMult > o.atrMax) return no(`nến quá lớn ${res.atrMult.toFixed(1)}×ATR (tin/thanh lý)`);
     // Momentum vào giữa cú chạy mạnh: nến lớn trước đó là bình thường → không chặn; chỉ bỏ khi chính nến tín hiệu > 3×ATR.
@@ -369,7 +376,25 @@
       m15Down: q ? q.dir === "giam" : undefined, m15Dir: q ? q.dir : undefined,
       h1Close: a.P.closes[a.idx], h1Ema21: a.P.ema21[a.idx], h1Rsi: a.P.rsi[a.idx],
       funding: null }; // Binance không trả funding lịch sử theo nến → bỏ qua bộ lọc funding khi xem lại quá khứ
-    return { htf, q };
+    return { htf, q, a, b };
+  }
+  // Đáy của nến khung lớn đang chạy, tính từ các nến 5M đã đóng (không nhìn trước tương lai).
+  function partialLow(c5, i, L, tfMin) {
+    const start = L.P.candles[L.idx].t + tfMin * 60000;
+    let m = Infinity;
+    for (let j = i; j >= 0 && c5[j].t >= start; j--) m = Math.min(m, c5[j].l);
+    return m === Infinity ? null : m;
+  }
+  function addHtfTouches(ctx, c5, i) {
+    ctx.htf.h1TouchLower = touchLowerHTF(ctx.a.P, ctx.a.idx, partialLow(c5, i, ctx.a, 60));
+    ctx.htf.h4TouchLower = touchLowerHTF(ctx.b.P, ctx.b.idx, partialLow(c5, i, ctx.b, 240));
+    return ctx;
+  }
+  // Khung lớn "chạm BB dưới": 1 trong 2 nến đã đóng gần nhất chạm, hoặc nến đang chạy (đáy tạm tính) đã xuống dưới dải.
+  function touchLowerHTF(P, idx, partialLow) {
+    if (idx == null || idx < 0 || !P.bb[idx]) return false;
+    if ([idx, idx - 1].some((j) => j >= 0 && P.bb[j] && P.candles[j].l <= P.bb[j].lower)) return true;
+    return partialLow != null && partialLow <= P.bb[idx].lower;
   }
   // 15M "chạm" nếu 1 trong 2 nến 15M đã đóng gần nhất chạm dải.
   const touch15 = (P15, idx) => {
@@ -387,6 +412,7 @@
       if (c5[i].t < from || c5[i].t > to) continue;
       const ctx = htfAt(L1, L4, LD, L15, tClose, o);
       if (!ctx) continue;
+      addHtfTouches(ctx, c5, i);
       const main = evaluate(P, i, ctx.htf, 5, o);
       const mom = ctx.q ? evaluateMomentum(P, i, m15Info(ctx.q), ctx.htf, 5, o) : { side: null, why: ["thiếu 15M"] };
       rows.push({ t: c5[i].t, o: c5[i].o, h: c5[i].h, l: c5[i].l, c: c5[i].c, main, mom,
@@ -405,6 +431,7 @@
       const tClose = c5[i].t + tfMinutes * 60000;
       const ctx = htfAt(L1, L4, LD, L15, tClose, o);
       if (!ctx) continue;
+      addHtfTouches(ctx, c5, i);
       const { htf, q } = ctx;
       let sig;
       if (o.engine === "m4h") {
@@ -434,6 +461,6 @@
       from: c5[100] && c5[100].t, to: c5[c5.length - 1] && c5[c5.length - 1].t };
   }
 
-  const api = { DEFAULTS, trendDir, prepare, evaluate, evaluateMomentum, touch15, outcome, backtest, replay, sessionBlock, bandWalk, atrArr, emaArr, rsiArr, bbArr };
+  const api = { DEFAULTS, trendDir, touchLowerHTF, prepare, evaluate, evaluateMomentum, touch15, outcome, backtest, replay, sessionBlock, bandWalk, atrArr, emaArr, rsiArr, bbArr };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.SolphaSignals = api;
 })(this);
