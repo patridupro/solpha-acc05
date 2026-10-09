@@ -85,15 +85,23 @@
     return null;
   }
 
-  // Giá ở dải ngoài khung lớn: 1D luôn chặn; 1H/4H được miễn nếu khung đó đang "bám dải" (xu hướng mạnh thật).
+  // Pha của một khung: giá phải nằm đúng phía EMA21, và EMA9 xác nhận (đã cắt hoặc đang dốc cùng chiều).
+  // Chỉ dùng giao cắt EMA9/21 thì rất trễ: sau đợt tăng dài, giá đã thủng EMA21 và chạm BB dưới mà vẫn ghi "tăng".
+  function trendDir(close, e9, e9prev, e21) {
+    if (close == null || e9 == null || e21 == null) return "sideway";
+    const slope = e9prev == null ? 0 : e9 - e9prev;
+    if (close < e21 && (e9 < e21 || slope < 0)) return "giam";
+    if (close > e21 && (e9 > e21 || slope > 0)) return "tang";
+    return "sideway";
+  }
+  // Giá ở dải ngoài khung lớn: chỉ cho vào nếu MỌI khung đang ở dải ngoài đều "bám dải" (xu hướng mạnh thật), ½ khối lượng.
   function chaseCheck(chase, dir, htf, o) {
     const band = dir === "long" ? "BB trên" : "BB dưới";
-    if (chase.includes("1D")) return { ok: false, why: `đang chase ${band} (${chase.join(",")})` };
     if (!o.allowBandWalk) return { ok: false, why: `đang chase ${band} (${chase.join(",")})` };
-    const walks = { "1H": dir === "long" ? htf.walkLong : htf.walkShort, "4H": dir === "long" ? htf.walk4hLong : htf.walk4hShort };
+    const walks = { "1H": dir === "long" ? htf.walkLong : htf.walkShort, "4H": dir === "long" ? htf.walk4hLong : htf.walk4hShort, "1D": dir === "long" ? htf.walk1dLong : htf.walk1dShort };
     for (const tf of chase) {
       const w = walks[tf];
-      if (!w || !w.ok) return { ok: false, why: `${tf} ở ${band} nhưng quá đà${w && w.why ? ": " + w.why : ""}` };
+      if (!w || !w.ok) return { ok: false, why: w && w.why ? `${tf} ở ${band} nhưng quá đà: ${w.why}` : `${tf} ở ${band}, chưa bám dải` };
     }
     return { ok: true };
   }
@@ -276,7 +284,7 @@
     if (atr == null || !bb || rsi == null || e9 == null || e21 == null) return no("thiếu dữ liệu");
     const range = k.h - k.l; res.range = range; res.atrMult = range / atr; res.pos = range > 0 ? (k.c - k.l) / range : 0.5;
     const volAvg = sma(P.vol.slice(i - 20, i)); res.volMult = volAvg ? k.v / volAvg : 0;
-    const dir5 = e9 > e21 ? "tang" : e9 < e21 ? "giam" : "sideway";
+    const dir5 = trendDir(k.c, e9, P.ema9[i - 3], e21);
     // Chỉ dùng cho SHORT: 4H + 1H giảm, 5M + 15M cùng chạm BB dưới.
     if (!(htf.h4Dir === "giam" && htf.h1Dir === "giam")) return no("4H/1H chưa cùng giảm");
     const htfSide = "short";
@@ -338,7 +346,7 @@
       let lo = 0, hi = candles.length - 1, idx = -1;
       while (lo <= hi) { const mid = (lo + hi) >> 1; if (candles[mid].t + tfMinutes * 60000 <= t) { idx = mid; lo = mid + 1; } else hi = mid - 1; }
       if (idx < 21) return null;
-      const dir = e9[idx] > P.ema21[idx] ? "tang" : e9[idx] < P.ema21[idx] ? "giam" : "sideway";
+      const dir = trendDir(P.closes[idx], e9[idx], e9[idx - 3], P.ema21[idx]);
       return { dir, bb: P.bb[idx], idx, P };
     };
   }
@@ -355,6 +363,7 @@
     const htf = { up: a.dir === "tang" && b.dir === "tang" && d.dir === "tang", down: a.dir === "giam" && b.dir === "giam" && d.dir === "giam", chaseUp, chaseDown,
       walkLong: bandWalk(a.P, a.idx, "long", o), walkShort: bandWalk(a.P, a.idx, "short", o),
       walk4hLong: bandWalk(b.P, b.idx, "long", o), walk4hShort: bandWalk(b.P, b.idx, "short", o),
+      walk1dLong: bandWalk(d.P, d.idx, "long", o), walk1dShort: bandWalk(d.P, d.idx, "short", o),
       h1Upper: a.bb && a.bb.upper, h1Lower: a.bb && a.bb.lower, h1RejectUpper,
       d1Dir: d.dir, h4Dir: b.dir, h1Dir: a.dir, d1Mid: d.bb && d.bb.mid, d1Lower: d.bb && d.bb.lower,
       m15Down: q ? q.dir === "giam" : undefined, m15Dir: q ? q.dir : undefined,
@@ -425,6 +434,6 @@
       from: c5[100] && c5[100].t, to: c5[c5.length - 1] && c5[c5.length - 1].t };
   }
 
-  const api = { DEFAULTS, prepare, evaluate, evaluateMomentum, touch15, outcome, backtest, replay, sessionBlock, bandWalk, atrArr, emaArr, rsiArr, bbArr };
+  const api = { DEFAULTS, trendDir, prepare, evaluate, evaluateMomentum, touch15, outcome, backtest, replay, sessionBlock, bandWalk, atrArr, emaArr, rsiArr, bbArr };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.SolphaSignals = api;
 })(this);

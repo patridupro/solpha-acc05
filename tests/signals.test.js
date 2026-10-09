@@ -70,7 +70,29 @@ console.log("momentum 4H/1H: OK");
   assert.strictEqual(ev(H({ chaseDown: ["4H"], walk4hShort: w })).plan.sizeFactor, 0.5, "4H bám dải → ½ khối lượng");
   assert.strictEqual(ev(H({ chaseDown: ["4H"], walk4hShort: bad })).side, null, "4H quá đà phải chặn");
   assert.strictEqual(ev(H({ chaseDown: ["1H", "4H"], walkShort: w, walk4hShort: w })).side, "short");
-  assert.strictEqual(ev(H({ chaseDown: ["1D"], walk4hShort: w })).side, null, "1D ở BB dưới luôn chặn");
+  assert.strictEqual(ev(H({ chaseDown: ["1D"], walk4hShort: w })).side, null, "1D ở BB dưới chưa bám dải phải chặn");
+  assert.strictEqual(ev(H({ chaseDown: ["1D"], walk1dShort: w })).side, "short", "1D bám BB dưới thì cho short");
+  assert.strictEqual(ev(H({ chaseDown: ["1D"], walk1dShort: w })).plan.sizeFactor, 0.5);
+  assert.strictEqual(ev(H({ chaseDown: ["1D", "4H"], walk1dShort: w, walk4hShort: bad })).side, null, "4H quá đà vẫn chặn");
   assert.strictEqual(ev(H({ chaseDown: ["4H"], walk4hShort: w }), { allowBandWalk: false }).side, null);
 }
 console.log("4H band walk: OK");
+
+// 6) Pha 1D: tăng dài 95 → 125 rồi rơi về ~112 (dưới EMA21, chạm BB dưới) phải là "giảm", không phải "tăng".
+{
+  const closes = [];
+  for (let x = 0; x < 60; x++) closes.push(96 + Math.sin(x / 3));             // đi ngang quanh 96
+  for (let x = 0; x < 16; x++) closes.push(96 + x * 1.8);                      // tăng lên ~124
+  for (let x = 0; x < 10; x++) closes.push(124 + Math.sin(x) * 1.2);           // đi ngang đỉnh
+  for (const c of [121.5, 119.8, 118.2, 116.2, 114.0, 112.6]) closes.push(c);   // giảm mạnh 6 phiên
+  const e9 = S.emaArr(closes, 9), e21 = S.emaArr(closes, 21), n = closes.length - 1;
+  const oldDir = e9[n] > e21[n] ? "tang" : "giam";
+  const newDir = S.trendDir(closes[n], e9[n], e9[n - 3], e21[n]);
+  const bb = S.bbArr(closes, 20, 2)[n];
+  console.log(`  1D mẫu: giá ${closes[n]} · EMA9 ${e9[n].toFixed(2)} · EMA21 ${e21[n].toFixed(2)} · BB dưới ${bb.lower.toFixed(2)} → cũ: ${oldDir}, mới: ${newDir}`);
+  assert.strictEqual(oldDir, "tang", "mẫu thử phải tái hiện được lỗi cũ");
+  assert.strictEqual(newDir, "giam", "cách mới phải nhận ra giảm");
+  assert.strictEqual(S.trendDir(120, 118, 117, 116), "tang");
+  assert.strictEqual(S.trendDir(115, 117, 116, 116.5), "sideway", "giá dưới EMA21 nhưng EMA9 còn trên và đang lên → đi ngang");
+}
+console.log("trendDir 1D: OK");

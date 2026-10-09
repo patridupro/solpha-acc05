@@ -134,13 +134,8 @@ function analyze(candles) {
   const r = rsi(closes, 14);
   const bb = bollinger(closes, 20, 2);
   const md = macd(closes);
-  let dir = "sideway";
-  if (e9 != null && e21 != null) {
-    if (e9 > e21 && last >= e9) dir = "tang";
-    else if (e9 < e21 && last <= e9) dir = "giam";
-    else if (e9 > e21) dir = "tang";
-    else if (e9 < e21) dir = "giam";
-  }
+  // Pha theo vị trí giá so với EMA21 + EMA9 xác nhận (xem SolphaSignals.trendDir) — tránh độ trễ của giao cắt EMA.
+  const dir = SolphaSignals.trendDir(last, e9, ema(closes.slice(0, -3), 9), e21);
   let band = "in";
   if (bb) {
     if (bb.pctB >= 0.95 || last >= bb.upper) band = "upper";
@@ -163,7 +158,7 @@ function sigOptions() {
   };
 }
 function htfContext(map, align) {
-  const h1 = map["1h"], P1 = SolphaSignals.prepare(h1.candles), P4 = SolphaSignals.prepare(map["4h"].candles);
+  const h1 = map["1h"], P1 = SolphaSignals.prepare(h1.candles), P4 = SolphaSignals.prepare(map["4h"].candles), PD = SolphaSignals.prepare(map["1d"].candles);
   let h1RejectUpper = false;
   for (let j = h1.candles.length - 2; j >= h1.candles.length - 3; j--) if (P1.bb[j] && h1.candles[j].h >= P1.bb[j].upper) h1RejectUpper = true;
   return {
@@ -175,6 +170,8 @@ function htfContext(map, align) {
     walkShort: SolphaSignals.bandWalk(P1, h1.candles.length - 2, "short", { ...SolphaSignals.DEFAULTS, ...sigOptions() }),
     walk4hLong: SolphaSignals.bandWalk(P4, map["4h"].candles.length - 2, "long", { ...SolphaSignals.DEFAULTS, ...sigOptions() }),
     walk4hShort: SolphaSignals.bandWalk(P4, map["4h"].candles.length - 2, "short", { ...SolphaSignals.DEFAULTS, ...sigOptions() }),
+    walk1dLong: SolphaSignals.bandWalk(PD, map["1d"].candles.length - 2, "long", { ...SolphaSignals.DEFAULTS, ...sigOptions() }),
+    walk1dShort: SolphaSignals.bandWalk(PD, map["1d"].candles.length - 2, "short", { ...SolphaSignals.DEFAULTS, ...sigOptions() }),
     h1Upper: h1.bb && h1.bb.upper, h1Lower: h1.bb && h1.bb.lower, h1RejectUpper,
     m15Down: align.m15 === "giam",
     d1Dir: align.d1, h4Dir: align.h4, h1Dir: align.h1,
@@ -193,7 +190,7 @@ function candleTrigger(map, align) {
   // Momentum 4H/1H: không chờ 1D; 15M + 5M cùng hướng và cùng chạm BB (nến đã đóng).
   const j15 = map["15m"].candles.length - 2, c15 = map["15m"].candles[j15], b15 = P["15m"].bb[j15];
   const e9 = P["15m"].ema9[j15], e21 = P["15m"].ema21[j15];
-  const m15 = { dir: e9 > e21 ? "tang" : e9 < e21 ? "giam" : "sideway", ...SolphaSignals.touch15(P["15m"], j15) };
+  const m15 = { dir: SolphaSignals.trendDir(c15.c, e9, P["15m"].ema9[j15 - 3], e21), ...SolphaSignals.touch15(P["15m"], j15) };
   rows.push({ key: "m4h", label: "4H/1H·5M+15M", ...SolphaSignals.evaluateMomentum(P["5m"], map["5m"].candles.length - 2, m15, htf, 5, opt) });
   return rows;
 }
