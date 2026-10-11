@@ -158,3 +158,8 @@ td.up { color: var(--up); } td.down { color: var(--down); }
 .rpwrap { max-height: 420px; overflow: auto; }
 .rpwrap td { white-space: nowrap; }
 tr.rphit td { background: rgba(255,93,115,.08); }
+
+.missedbox { font-size: 13px; line-height: 1.55; margin: 0 0 10px; }
+.missedbox .mrow { padding: 4px 0; border-bottom: 1px solid #1a2030; }
+.missedbox .mrow.miss { background: rgba(255,93,115,.08); }
+.notifydiag { font-size: 12px; line-height: 1.55; }

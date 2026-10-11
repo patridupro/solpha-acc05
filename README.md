@@ -17,6 +17,14 @@ Nút **Tối ưu 30 ngày** (ô Nến tín hiệu): app tải 30 ngày dữ li�
 
 Trong ô Nến tín hiệu: chọn ngày giờ → **Soi lại 3 giờ**. App tải dữ liệu Binance quanh mốc đó và liệt kê từng nến 5M: hướng 1D/4H/1H/15M, quyết định của bộ chính và của Momentum 4H/1H, kèm lý do. Bộ lọc funding không áp dụng khi xem lại.
 
+## Thông báo — giới hạn của app web
+
+App chỉ quét được khi **đang chạy**. Android thường đóng băng web app khi tắt màn hình hoặc chuyển sang app khác, nên không quét, không báo. Đã bổ sung:
+- **Gửi thông báo thử** (Cài đặt): hiện quyền, service worker, kết quả gửi để biết lỗi ở app hay ở Android.
+- **Quét bù**: khi mở lại app, tự xem lại 90 phút qua, liệt kê tín hiệu (đánh dấu BỎ LỠ) và báo bù.
+- **Quét ngay khi mở lại** thay vì chờ mốc 5 phút kế tiếp; tuỳ chọn **giữ màn hình sáng**.
+- Muốn cảnh báo 24/7 khi tắt màn hình cần máy chủ quét giá và đẩy thông báo (Telegram/Web Push).
+
 ## Kiểm tra
 
 `node tests/signals.test.js` — kiểm tra tham số mặc định và các tình huống Short/Short điều chỉnh chính. Chạy trước mỗi lần push.

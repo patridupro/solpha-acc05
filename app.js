@@ -11,7 +11,10 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} }
 };
 let lastAlertKey = store.get("solpha_last_alert", "");
-let lastTriggerKey = store.get("solpha_last_trigger", "");
+// Mỗi tín hiệu (khung + nến + hướng) chỉ báo một lần; danh sách lưu lại để quét bù không báo trùng.
+const seenKeys = (() => { try { return new Set(JSON.parse(store.get("solpha_seen", "[]"))); } catch (_) { return new Set(); } })();
+function markSeen(key) { seenKeys.add(key); store.set("solpha_seen", JSON.stringify([...seenKeys].slice(-300))); }
+let scanning = false, lastScanAt = 0, wakeLock = null;
 let lastFunding = null;
 let deferredPrompt = null;
 let priceTimer = null;
@@ -361,19 +364,21 @@ function nextHourLabel() {
   d.setHours(d.getHours() + 1);
   $("nextScan").textContent = "Quét giờ tới: " + d.toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" });
 }
-async function notify(title, body) {
-  if (!("Notification" in window) || Notification.permission !== "granted") return;
-  const opts = { body, icon: "icons/icon-192.png", badge: "icons/icon-192.png", tag: "solpha-alert", renotify: true, vibrate: [200, 100, 200] };
+async function notify(title, body, tag = "solpha-alert") {
+  if (!("Notification" in window)) return "Thiết bị không hỗ trợ thông báo";
+  if (Notification.permission !== "granted") return "Quyền thông báo: " + Notification.permission;
+  const opts = { body, icon: "icons/icon-192.png", badge: "icons/icon-192.png", tag, renotify: true, vibrate: [300, 150, 300, 150, 300], requireInteraction: true };
   if ($("chkSound").checked) beep();
   // Chrome Android không cho dùng new Notification() — bắt buộc đi qua service worker.
   try {
     const reg = "serviceWorker" in navigator ? await navigator.serviceWorker.ready : null;
-    if (reg) return reg.showNotification(title, opts);
-  } catch (_) {}
+    if (reg) { await reg.showNotification(title, opts); return "ok"; }
+  } catch (e) { return "Lỗi service worker: " + (e.message || e); }
   try {
     const n = new Notification(title, opts);
     setTimeout(() => n.close(), 12000);
-  } catch (_) {}
+    return "ok";
+  } catch (e) { return "Lỗi thông báo: " + (e.message || e); }
 }
 function beep() {
   try {
@@ -384,6 +389,9 @@ function beep() {
   } catch (_) {}
 }
 async function fullScan(reason = "manual") {
+  if (scanning) return;
+  scanning = true;
+  const gapMin = lastScanAt ? (Date.now() - lastScanAt) / 60000 : 0; // app "ngủ" bao lâu trước lần quét này
   $("livePill").textContent = "SCAN";
   try {
     await loadTicker();
@@ -411,20 +419,66 @@ async function fullScan(reason = "manual") {
     }
     for (const x of trig.filter((t) => t.side)) {
       const key = `${x.key}-${x.t}-${x.side}`;
-      if (key === lastTriggerKey) continue;
-      lastTriggerKey = key;
-      store.set("solpha_last_trigger", key);
+      if (seenKeys.has(key)) continue;
+      markSeen(key);
       const p = x.plan;
       const msg = `${x.side.toUpperCase()}${x.engine === "m4h" ? " MOMENTUM 4H/1H (½ size" + (x.d1Against ? ", ngược 1D" : "") + ")" : ""}${x.corrective ? " ĐIỀU CHỈNH (½ size)" : ""} Setup ${x.setup} ${x.label}${x.momentum ? " (Momentum ½ size)" : ""} · vào ${fmt(p.entries[0])}/${fmt(p.entries[1])}/${fmt(p.entries[2])} · SL ${fmt(p.sl)} · TP1 ${fmt(p.tp1)} (1:${fmt(p.rr1, 1)}) · TP2 ${fmt(p.tp2)} (1:${fmt(p.rr2, 1)})`;
       addLog(msg, true);
       await notify("SOLPHA nến tín hiệu", msg);
     }
+    await catchUp(map, gapMin);
   } catch (e) {
     $("orderBox").textContent = "Lỗi tải dữ liệu: " + (e.message || e);
     addLog("Lỗi API: " + (e.message || e), false);
   }
   $("livePill").textContent = "LIVE";
   nextHourLabel();
+  lastScanAt = Date.now();
+  scanning = false;
+}
+// Quét bù: xem lại các nến 5M đã đóng trong 90 phút qua bằng đúng bộ máy tín hiệu, liệt kê tín hiệu (kể cả khi app "ngủ"
+// lúc nó xảy ra) và báo bù những tín hiệu chưa từng báo. Không áp dụng bộ lọc funding trừ khi funding hiện tại đã quá âm.
+async function catchUp(map, gapMin) {
+  const box = $("missedBox"); if (!box) return;
+  const closed = (k) => map[k].candles.slice(0, -1);
+  const c5 = closed("5m"); if (c5.length < 120) return;
+  const to = c5[c5.length - 1].t, from = to - 17 * 5 * 60000;
+  let rows = [];
+  try { rows = SolphaSignals.replay(c5, closed("1h"), closed("4h"), closed("1d"), closed("15m"), from, to, sigOptions()); } catch (_) { return; }
+  const fundingBlocks = lastFunding != null && lastFunding <= SolphaSignals.DEFAULTS.fundingMin;
+  const items = [];
+  for (const r of rows) {
+    if (r.main.side && !(fundingBlocks && r.main.side === "short")) items.push({ key: `5m-${r.t}-${r.main.side}`, t: r.t, sig: r.main, tag: r.main.corrective ? "ĐC " + r.main.setup : r.main.setup });
+    if (r.mom.side && !fundingBlocks) items.push({ key: `m4h-${r.t}-short`, t: r.t, sig: r.mom, tag: "M4H" });
+  }
+  items.sort((a, b) => b.t - a.t);
+  const hm = (t) => new Date(t).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" });
+  const missed = items.filter((x) => !seenKeys.has(x.key));
+  const sleep = gapMin >= 8 ? `<div class="muted">App vừa thức dậy sau ${Math.round(gapMin)} phút "ngủ" — đã quét bù các nến trong lúc đó.</div>` : "";
+  box.innerHTML = sleep + (items.length ? `<div class="muted"><b>Tín hiệu 90 phút qua</b></div>` + items.map((x) => {
+    const p = x.sig.plan, age = Math.round((Date.now() - (x.t + 300000)) / 60000), isMiss = !seenKeys.has(x.key);
+    return `<div class="mrow ${isMiss ? "miss" : ""}"><b>${hm(x.t)}</b> · ${x.sig.side.toUpperCase()} ${x.tag}${(p.sizeFactor || 1) < 1 ? " ½" : ""} · ${age}′ trước · vào ${fmt(p.entries[0])} · SL ${fmt(p.sl)} · TP1 ${fmt(p.tp1)}${isMiss ? ' <span class="tag giam">BỎ LỠ</span>' : ""}</div>`;
+  }).join("") + `<div class="muted">Tín hiệu quá 30′ tuổi: giá đã đi xa, cân nhắc kỹ trước khi vào.</div>` : "");
+  if (missed.length) {
+    missed.forEach((x) => markSeen(x.key));
+    const msg = `Bỏ lỡ ${missed.length} tín hiệu: ` + missed.slice(0, 4).map((x) => `${hm(x.t)} ${x.sig.side.toUpperCase()} ${x.tag}`).join(" · ") + " — mở app xem kế hoạch lệnh";
+    addLog(msg, true);
+    if (document.visibilityState !== "visible") await notify("SOLPHA — tín hiệu bỏ lỡ", msg, "solpha-missed");
+  }
+}
+// App thức dậy (mở lại / quay lại từ app khác): quét ngay thay vì chờ mốc 5 phút kế tiếp.
+function wake(reason) { if (Date.now() - lastScanAt > 45000) fullScan(reason); }
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { wake("resume"); if (store.get("solpha_wake", "0") === "1") setWake(true); } });
+window.addEventListener("pageshow", () => wake("resume"));
+window.addEventListener("focus", () => wake("resume"));
+async function setWake(on) {
+  try {
+    if (on && "wakeLock" in navigator) {
+      if (wakeLock) return;
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener("release", () => { wakeLock = null; });
+    } else if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
+  } catch (_) { wakeLock = null; }
 }
 function scheduleHourly() {
   clearInterval(hourTimer);
@@ -487,6 +541,9 @@ renderLogs(); schedulePrice(); scheduleHourly(); fullScan("boot");
   bind("chkSetupS3", "solpha_setupS3", "1", true);
   bind("chkCorrective", "solpha_corrective", "1", true);
   bind("chkM4H", "solpha_m4h", "1", true);
+  // Giữ màn hình sáng: bind riêng (không quét lại khi đổi) vì phải xin khoá màn hình.
+  const w = $("chkWake");
+  if (w) { w.checked = store.get("solpha_wake", "0") === "1"; w.addEventListener("change", () => { store.set("solpha_wake", w.checked ? "1" : "0"); setWake(w.checked); }); if (w.checked) setWake(true); }
 })();
 // ---- Backtest: so bộ cũ ($0.55) với bộ mới (ATR + volume + Setup A/B) trên dữ liệu thật của Binance ----
 $("btnBacktest").addEventListener("click", async () => {
@@ -633,3 +690,16 @@ $("btnOptimize") && $("btnOptimize").addEventListener("click", async () => {
   let a = null; try { a = JSON.parse(store.get("solpha_opt_applied", "null")); } catch (_) {}
   if (a && $("optBox")) $("optBox").innerHTML = `<div class="muted">Lần áp dụng gần nhất: ${new Date(a.at).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })} · đang giữ: ${a.keep.join(", ") || "—"}. Nên chạy lại mỗi tuần.</div>`;
 })();
+
+// ---- Gửi thông báo thử + chẩn đoán ----
+$("btnTestNotify") && $("btnTestNotify").addEventListener("click", async () => {
+  const out = $("notifyDiag"); out.textContent = "Đang gửi…";
+  if ("Notification" in window && Notification.permission === "default") { try { await Notification.requestPermission(); } catch (_) {} }
+  const perm = "Notification" in window ? Notification.permission : "không hỗ trợ";
+  const sw = "serviceWorker" in navigator ? ((await navigator.serviceWorker.getRegistration()) ? "đã đăng ký" : "CHƯA đăng ký") : "không hỗ trợ";
+  const res = await notify("SOLPHA — thông báo thử", "Nếu anh thấy dòng này trên khay thông báo và máy rung thì cảnh báo hoạt động.", "solpha-test");
+  const standalone = window.matchMedia("(display-mode: standalone)").matches ? "đang chạy như app đã cài" : "đang chạy trong trình duyệt (chưa mở từ icon)";
+  out.innerHTML = `Quyền: <b>${perm}</b> · Service worker: <b>${sw}</b> · Kết quả gửi: <b>${res}</b> · ${standalone}.<br>` +
+    (perm === "granted" && res === "ok" ? "App đã gửi. <b>Không thấy thông báo / không rung</b> → lỗi nằm ở Android: Cài đặt → Ứng dụng → SOLPHA (hoặc Chrome) → Thông báo: bật, cho phép rung/âm thanh, mức độ ưu tiên cao; tắt Không làm phiền / chế độ im lặng; Pin → không hạn chế." :
+     perm === "denied" ? "Thông báo đang bị chặn: Chrome → Cài đặt trang web → Thông báo → cho phép solpha.pages.dev." : "Bấm lại sau khi cho phép thông báo.");
+});

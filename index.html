@@ -73,6 +73,7 @@
       </div>
       <p id="trigText" class="big">Đang quét…</p>
       <div id="trigWhy" class="trigwhy"></div>
+      <div id="missedBox" class="missedbox"></div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Khung</th><th>Mở → Đóng</th><th>Range</th><th>Volume</th><th>Vị trí đóng</th><th>Tín hiệu</th><th>Ghi chú</th></tr></thead>
@@ -148,6 +149,9 @@
           <label><input type="checkbox" id="chkM4H" /> Momentum 4H/1H (chỉ Short) · không chờ 1D: 4H+1H giảm, 15M+5M giảm và cùng chạm BB dưới (½ khối lượng)</label>
           <label><input type="checkbox" id="chkCorrective" /> Short điều chỉnh · 1D còn tăng nhưng giá thủng BB mid 1D (S1/S3, ½ khối lượng)</label>
           <label><input type="checkbox" id="chkSound" checked /> Âm báo khi cảnh báo</label>
+          <label><input type="checkbox" id="chkWake" /> Giữ màn hình sáng khi mở app (để quét kịp mỗi 5 phút, tốn pin)</label>
+          <div class="jactions"><button id="btnTestNotify" class="btn ghost">Gửi thông báo thử</button></div>
+          <div id="notifyDiag" class="muted notifydiag"></div>
           <label>Làm mới giá
             <select id="selPrice">
               <option value="15">15 giây</option>
