@@ -103,7 +103,7 @@
         <table>
           <thead>
             <tr>
-              <th>Khung</th><th>Hướng</th><th>RSI14</th><th>EMA9/21</th><th>MACD hist*</th>
+              <th>Khung</th><th>Hướng</th><th>RSI14</th><th>EMA9/21</th><th>MACD* (DIF / DEA)</th>
               <th>BB Upper</th><th>BB Mid</th><th>BB Lower</th><th>%B</th><th>Band</th>
             </tr>
           </thead>
@@ -207,7 +207,7 @@
           <label>Vốn ($) <input type="number" id="inpAcct" min="0" step="10" inputmode="decimal" placeholder="vd 1000" /></label>
           <label>Rủi ro mỗi lệnh (%) <input type="number" id="inpRisk" min="0.1" max="5" step="0.1" inputmode="decimal" /></label>
           <label>Làm mới giá
-            <select id="selPrice"><option value="15">15 giây</option><option value="30" selected>30 giây</option><option value="60">60 giây</option></select>
+            <select id="selPrice"><option value="5">5 giây</option><option value="10" selected>10 giây</option><option value="15">15 giây</option><option value="30">30 giây</option><option value="60">60 giây</option></select>
           </label>
           <label><input type="checkbox" id="chkSound" checked /> Âm báo khi cảnh báo</label>
           <label><input type="checkbox" id="chkWake" /> Giữ màn hình sáng khi mở app (để quét kịp mỗi 5 phút, tốn pin)</label>
@@ -236,7 +236,7 @@
       <article class="card">
         <h2>Rule cố định</h2>
         <ol class="rules">
-          <li>Đồng pha = 1D + 4H + 1H cùng hướng EMA9/21, 15M không ngược mạnh. 5M chỉ timing. *MACD(12,26,9) chỉ hiển thị để tham khảo, không phải điều kiện.</li>
+          <li>Đồng pha = 1D + 4H + 1H cùng hướng EMA9/21, 15M không ngược mạnh. 5M chỉ timing. *MACD(12,26,9) tính như Binance: MACD = DIF − DEA, theo nến đang chạy, làm mới 20 giây/lần — chỉ để tham khảo, không phải điều kiện.</li>
           <li>Cảnh báo chỉ khi đồng pha VÀ chạm BB trên ≥2 khung, trong đó có ≥1 khung 1H/4H/1D.</li>
           <li>Long thuận trend: ưu tiên chạm lower. Không chase upper weekly/daily.</li>
           <li>Short chỉ khi HTF đã bear. SL/TP viết tới 2 số thập phân.</li>

@@ -36,6 +36,7 @@ const fmtQty = (q) => (q >= 100 ? q.toFixed(0) : q >= 1 ? q.toFixed(2) : q >= 0.
 let deferredPrompt = null;
 let priceTimer = null;
 let hourTimer = null;
+let liveTimer = null;
 const $ = (id) => document.getElementById(id);
 function ema(values, period) {
   if (values.length < period) return null;
@@ -100,9 +101,13 @@ function nowVN() {
   return new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
 }
 async function fetchJSON(url) {
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(res.status + " " + url);
-  return res.json();
+  // Có giới hạn thời gian: Android hay treo kết nối khi app bị đóng băng, không có timeout thì cả vòng cập nhật đứng yên.
+  const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 6000);
+  try {
+    const res = await fetch(url, { cache: "no-store", signal: ctl.signal });
+    if (!res.ok) throw new Error(res.status + " " + url);
+    return await res.json();
+  } finally { clearTimeout(to); }
 }
 async function withBase(pathSpot, pathFutures) {
   const errors = [];
@@ -117,13 +122,13 @@ async function withBase(pathSpot, pathFutures) {
   throw new Error(errors.join(" | "));
 }
 async function loadTicker(sym) {
+  // Giá 24h và mark/funding lấy song song; mark/funding lỗi thì bỏ qua, không kéo chậm giá.
+  const prem = withBase(`/fapi/v1/premiumIndex?symbol=${sym}`, `/fapi/v1/premiumIndex?symbol=${sym}`).then((x) => x.data, () => null);
   const { data, source } = await withBase(`/api/v3/ticker/24hr?symbol=${sym}`, `/fapi/v1/ticker/24hr?symbol=${sym}`);
   const t = { last: Number(data.lastPrice), mark: Number(data.lastPrice), chg: Number(data.priceChangePercent), high: Number(data.highPrice), low: Number(data.lowPrice), source, funding: null };
-  try {
-    const { data: d2 } = await withBase(`/fapi/v1/premiumIndex?symbol=${sym}`, `/fapi/v1/premiumIndex?symbol=${sym}`);
-    if (d2 && d2.markPrice) t.mark = Number(d2.markPrice);
-    if (d2 && d2.lastFundingRate != null) t.funding = Number(d2.lastFundingRate);
-  } catch (_) {}
+  const d2 = await Promise.race([prem, new Promise((r) => setTimeout(() => r(null), 2000))]);
+  if (d2 && d2.markPrice) t.mark = Number(d2.markPrice);
+  if (d2 && d2.lastFundingRate != null) t.funding = Number(d2.lastFundingRate);
   return t;
 }
 function renderTicker(t) {
@@ -136,6 +141,13 @@ function renderTicker(t) {
   $("low24").textContent = "$" + fp(t.low);
   $("source").textContent = t.source;
   $("funding").textContent = t.funding == null ? "—" : (t.funding * 100).toFixed(4) + "%";
+  renderUpdated(stOf(active));
+}
+// "Giá" = lần lấy giá gần nhất (mỗi vài giây); "quét" = lần tính tín hiệu gần nhất (mỗi 5 phút).
+function renderUpdated(st) {
+  const hms = (t) => new Date(t).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const scan = st.liveAt && st.liveAt > (st.scanAt || 0) ? ` · chỉ báo ${hms(st.liveAt).slice(0, 5)}` : st.scanAt ? ` · quét ${hms(st.scanAt).slice(0, 5)}` : "";
+  $("updated").textContent = st.tickerAt ? `giá ${hms(st.tickerAt)}${scan}` : st.updated || "—";
 }
 async function loadKlinesUntil(sym, interval, limit, endTime) {
   const q = `symbol=${sym}&interval=${interval}&limit=${limit}&endTime=${endTime}`;
@@ -343,12 +355,15 @@ function buildOrder(price, map, align, bands) {
   }
   return lines.join("\n");
 }
+// Số lẻ MACD giống app Binance: BTC 1 số, ETH 2 số, coin giá nhỏ thêm 1 số so với giá.
+const macdDec = (p) => (p >= 10000 ? 1 : p >= 1000 ? 2 : decFor(p) + 1);
 function renderTable(map) {
+  const md = macdDec(map["5m"].last);
   $("tfBody").innerHTML = TFS.map((tf) => {
     const a = map[tf.key];
     const emaTxt = a.e9 && a.e21 ? `${fp(a.e9)} / ${fp(a.e21)}` : "—";
     const bandLabel = a.band === "upper" ? "CHẠM UPPER" : a.band === "lower" ? "CHẠM LOWER" : "Trong band";
-    return `<tr><td><b>${tf.label}</b></td><td><span class="tag ${a.dir}">${a.dir.toUpperCase()}</span></td><td>${fmt(a.rsi, 1)}</td><td>${emaTxt}</td><td>${a.macd ? `<span class="tag ${a.macd.dir}">${fmt(a.macd.hist, 3)}</span>` : "—"}</td><td>${a.bb ? fp(a.bb.upper) : "—"}</td><td>${a.bb ? fp(a.bb.mid) : "—"}</td><td>${a.bb ? fp(a.bb.lower) : "—"}</td><td>${a.bb ? fmt(a.bb.pctB, 2) : "—"}</td><td><span class="tag ${a.band}">${bandLabel}</span></td></tr>`;
+    return `<tr><td><b>${tf.label}</b></td><td><span class="tag ${a.dir}">${a.dir.toUpperCase()}</span></td><td>${fmt(a.rsi, 1)}</td><td>${emaTxt}</td><td>${a.macd ? `<span class="tag ${a.macd.dir}">${fmt(a.macd.hist, md)}</span> <span class="muted">${fmt(a.macd.macd, md)} / ${fmt(a.macd.signal, md)}</span>` : "—"}</td><td>${a.bb ? fp(a.bb.upper) : "—"}</td><td>${a.bb ? fp(a.bb.mid) : "—"}</td><td>${a.bb ? fp(a.bb.lower) : "—"}</td><td>${a.bb ? fmt(a.bb.pctB, 2) : "—"}</td><td><span class="tag ${a.band}">${bandLabel}</span></td></tr>`;
   }).join("");
 }
 function setStatus(align, bands) {
@@ -411,14 +426,14 @@ function beep() {
 // Quét một cặp: tính toàn bộ, lưu vào state[sym], gửi cảnh báo (mọi cặp, không chỉ cặp đang xem).
 async function scanPair(sym, reason, gapMin) {
   const st = stOf(sym), coin = baseOf(sym), opt = sigOptions(sym);
-  try { st.ticker = await loadTicker(sym); st.funding = st.ticker.funding; } catch (e) { st.tickerError = String(e.message || e); }
+  try { st.ticker = await loadTicker(sym); st.tickerAt = Date.now(); st.funding = st.ticker.funding; } catch (e) { st.tickerError = String(e.message || e); }
   const entries = await Promise.all(TFS.map(async (tf) => [tf.key, analyze(await loadKlines(sym, tf.binance))]));
   const map = Object.fromEntries(entries);
   const price = map["5m"].last;
   curDec = decFor(price);
   const align = alignment(map), bands = bandHits(map), fire = align.aligned && bands.ready;
   const trig = candleTrigger(map, align, st.funding, sym);
-  Object.assign(st, { map, align, bands, trig, price, fire, error: null, updated: nowVN() });
+  Object.assign(st, { map, align, bands, trig, price, fire, error: null, updated: nowVN(), scanAt: Date.now() });
   st.order = buildOrder(price, map, align, bands);
   persistPlan(sym, trig);
   const summary = fire ? `CẢNH BÁO ${align.dir} @ ${fp(price)} · ${bands.hits.map((h) => h.label).join(",")}` : `WAIT ${fp(price)} · 1D ${align.d1} / 4H ${align.h4} / 1H ${align.h1}`;
@@ -442,6 +457,22 @@ async function scanPair(sym, reason, gapMin) {
   }
   await catchUp(sym, map, gapMin);
 }
+// Làm mới chỉ báo (RSI/EMA/BB/MACD) của cặp đang xem theo nến đang chạy, giống biểu đồ Binance.
+// Không gửi cảnh báo — cảnh báo vẫn theo vòng quét 5 phút trên nến đã đóng.
+async function liveRefresh() {
+  const sym = active, st = stOf(sym);
+  if (scanning || st.live || !st.map || document.visibilityState !== "visible") return;
+  st.live = true;
+  try {
+    const entries = await Promise.all(TFS.map(async (tf) => [tf.key, analyze(await loadKlines(sym, tf.binance))]));
+    const map = Object.fromEntries(entries), price = map["5m"].last;
+    const align = alignment(map), bands = bandHits(map);
+    Object.assign(st, { map, align, bands, price, fire: align.aligned && bands.ready, trig: candleTrigger(map, align, st.funding, sym), liveAt: Date.now() });
+    st.order = buildOrder(price, map, align, bands);
+    if (sym === active) renderPair(sym);
+  } catch (_) {}
+  st.live = false;
+}
 // Vẽ một cặp lên màn hình từ dữ liệu đã quét.
 function renderPair(sym) {
   const st = stOf(sym), coin = baseOf(sym);
@@ -460,7 +491,7 @@ function renderPair(sym) {
   renderTrigger(st.trig);
   if (!renderPlan(sym) && !st.fire) $("biasText").textContent = "WAIT";
   $("orderBox").textContent = (st.error ? "⚠ Lần quét gần nhất lỗi: " + st.error + "\n(đang hiện dữ liệu lần trước)\n\n" : "") + st.order;
-  $("updated").textContent = st.updated;
+  renderUpdated(st);
   $("missedBox").innerHTML = st.missedHtml || "";
   const bd = badgeFor(sym);
   $("heroBadge").className = "pbadge " + bd.cls;
@@ -484,13 +515,16 @@ function renderTabs() {
   $("pairBar").innerHTML = tabs + `<button class="ptab add" id="btnAddPair" aria-label="Thêm / quản lý cặp">＋</button>`;
 }
 async function refreshTickers() {
+  // Mỗi cặp tự cập nhật độc lập và hiện ngay khi giá về: một cặp chậm/treo không làm đứng các cặp khác.
   await Promise.all(pairs.map(async (b) => {
     const sym = symOf(b), st = stOf(sym);
-    try { st.ticker = await loadTicker(sym); st.funding = st.ticker.funding; } catch (_) {}
+    if (st.refreshing) return;
+    st.refreshing = true;
+    try { st.ticker = await loadTicker(sym); st.tickerAt = Date.now(); st.funding = st.ticker.funding; st.tickerError = null; } catch (e) { st.tickerError = String(e.message || e); }
+    st.refreshing = false;
+    renderTabs();
+    if (sym === active && st.ticker) renderTicker(st.ticker);
   }));
-  renderTabs();
-  const st = stOf(active);
-  if (st.ticker) renderTicker(st.ticker);
 }
 async function fullScan(reason = "manual", onlyActive = false) {
   if (scanning) return;
@@ -541,7 +575,7 @@ async function catchUp(sym, map, gapMin) {
 }
 // App thức dậy (mở lại / quay lại từ app khác): quét ngay thay vì chờ mốc 5 phút kế tiếp.
 function wake(reason) { if (Date.now() - lastScanAt > 45000) fullScan(reason); }
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { wake("resume"); if (store.get("solpha_wake", "0") === "1") setWake(true); } });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { wake("resume"); refreshTickers(); if (store.get("solpha_wake", "0") === "1") setWake(true); } });
 window.addEventListener("pageshow", () => wake("resume"));
 window.addEventListener("focus", () => wake("resume"));
 async function setWake(on) {
@@ -566,8 +600,10 @@ function scheduleHourly() {
 }
 function schedulePrice() {
   clearInterval(priceTimer);
-  const sec = Number($("selPrice").value || 30);
+  const sec = Number($("selPrice").value || 10);
   priceTimer = setInterval(refreshTickers, sec * 1000);
+  clearInterval(liveTimer);
+  liveTimer = setInterval(liveRefresh, 20000);
 }
 window.addEventListener("beforeinstallprompt", (e) => {
   e.preventDefault(); deferredPrompt = e; $("btnInstall").classList.remove("hidden");
@@ -585,7 +621,8 @@ $("btnNotify").addEventListener("click", async () => {
   $("btnNotify").textContent = perm === "granted" ? "Cảnh báo đã bật" : "Trình duyệt chặn thông báo";
 });
 $("btnRefresh").addEventListener("click", () => fullScan("manual"));
-$("selPrice").addEventListener("change", schedulePrice);
+$("selPrice").value = store.get("solpha_price_sec", "10");
+$("selPrice").addEventListener("change", () => { store.set("solpha_price_sec", $("selPrice").value); schedulePrice(); });
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js", { scope: "./" }).catch(() => {});
 if ("Notification" in window && Notification.permission === "granted") $("btnNotify").textContent = "Cảnh báo đã bật";
 renderLogs(); schedulePrice(); scheduleHourly(); renderTabs(); refreshTickers(); fullScan("boot");
@@ -626,7 +663,7 @@ function switchPair(sym) {
   if (!pairs.includes(baseOf(sym))) return;
   active = sym; store.set("solpha_active", sym);
   curDec = decFor((stOf(sym).price) || 1);
-  syncSettingsUI(); renderPair(sym); renderTabs(); renderOptHint();
+  syncSettingsUI(); renderPair(sym); renderTabs(); renderOptHint(); refreshTickers();
   for (const id of ["btBox", "rpBox"]) if ($(id)) $(id).innerHTML = "";
   if (!stOf(sym).map) fullScan("manual", true);
 }
