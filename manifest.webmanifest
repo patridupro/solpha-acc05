@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "SOLPHA · SOL/USDT Desk",
+  "name": "SOLPHA · Futures Desk",
   "short_name": "SOLPHA",
-  "description": "Theo dõi SOL/USDT perpetual đa khung, đồng pha và Bollinger, cảnh báo theo giờ.",
+  "description": "Theo dõi SOL, BTC, ETH và nhiều cặp futures đa khung, đồng pha và Bollinger, cảnh báo theo giờ.",
   "lang": "vi",
   "dir": "ltr",
   "start_url": "./?source=pwa",

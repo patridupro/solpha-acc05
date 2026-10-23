@@ -1,10 +1,17 @@
-# SOLPHA — SOL/USDT Perpetual Desk
+# SOLPHA — Futures Desk (SOL · BTC · ETH · thêm cặp tuỳ ý)
 
-PWA theo dõi SOL/USDT futures đa khung (5M, 15M, 1H, 4H, 1D), RSI / EMA / Bollinger, cảnh báo khi **đồng pha + chạm band**.
+PWA theo dõi futures USDT-M đa khung (5M, 15M, 1H, 4H, 1D), RSI / EMA / Bollinger, cảnh báo khi **đồng pha + chạm band**.
 
 ## Link đang chạy
 
 https://solpha.pages.dev — Cloudflare Pages build từ nhánh `claude/intelligent-lamport-vrk29w` của repo này (1 build mỗi lần push). Đường dẫn trong app đều tương đối nên vẫn chạy được nếu sau này chuyển sang GitHub Pages/Netlify.
+
+## Nhiều cặp
+
+- Thanh tab trên cùng: **SOL, BTC, ETH** (mỗi tab hiện giá, %24h và nhãn LONG / SHORT / CHÚ Ý / CHỜ). Nút **＋** thêm bất kỳ cặp USDT nào có trên Binance Futures (tối đa 8), bấm ✕ để xoá.
+- Cùng bộ máy tín hiệu (ATR/BB/EMA/volume, Long A/B, Short S1/S2/S3, điều chỉnh, Momentum 4H/1H) cho mọi cặp; app **quét tất cả cặp mỗi 5 phút** và báo thông báo kèm tên coin (cặp đang xem quét trước).
+- Cài đặt điều kiện, kế hoạch lệnh, Backtest, Tối ưu 30 ngày, Soi lại đều **riêng từng cặp** (SOL giữ nguyên cài đặt cũ). Vốn và % rủi ro dùng chung. Chạy Tối ưu 30 ngày cho từng cặp trước khi tin.
+- Thanh điều hướng dưới: Tín hiệu · Phân tích · Công cụ · Nhật ký · Cài đặt.
 
 ## Tối ưu 30 ngày
 

@@ -4,11 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#0b0d12" />
-  <meta name="description" content="SOLPHA — theo dõi SOL/USDT perpetual đa khung, đồng pha + Bollinger, cảnh báo theo giờ." />
+  <meta name="description" content="SOLPHA — theo dõi nhiều cặp futures (SOL, BTC, ETH…) đa khung, đồng pha + Bollinger, cảnh báo tín hiệu." />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="SOLPHA" />
-  <title>SOLPHA · SOL/USDT Desk</title>
+  <title>SOLPHA · Futures Desk</title>
   <meta name="mobile-web-app-capable" content="yes" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" type="image/svg+xml" href="icon.svg" />
@@ -23,7 +23,7 @@
       <img class="logo" src="icon.svg" alt="SOLPHA" width="40" height="40" />
       <div>
         <h1>SOLPHA</h1>
-        <p>SOL/USDT Perpetual · MTF · BB</p>
+        <p>Futures Desk · đa cặp · MTF · BB</p>
       </div>
     </div>
     <div class="top-actions">
@@ -32,10 +32,21 @@
       <button id="btnRefresh" class="btn primary">Quét ngay</button>
     </div>
   </header>
+  <nav class="pairbar" id="pairBar" aria-label="Cặp giao dịch"></nav>
+  <section class="addpanel hidden" id="addPanel">
+    <div class="addrow">
+      <input id="addInput" list="coinList" placeholder="Mã coin, ví dụ BNB" autocomplete="off" autocapitalize="characters" />
+      <datalist id="coinList"><option value="BNB"><option value="XRP"><option value="DOGE"><option value="ADA"><option value="AVAX"><option value="LINK"><option value="SUI"><option value="TON"><option value="LTC"><option value="TRX"></datalist>
+      <button id="btnAddPair2" class="btn primary">Thêm cặp</button>
+    </div>
+    <div id="addMsg" class="muted addmsg"></div>
+    <div id="pairList" class="pairlist"></div>
+  </section>
   <main>
+    <div class="view" data-view="signal">
     <section class="hero card">
       <div class="price-block">
-        <div class="pair">SOLUSDT.P</div>
+        <div class="pair"><span id="heroPair">SOLUSDT.P</span> <span id="heroBadge" class="pbadge wait">CHỜ</span></div>
         <div id="lastPrice" class="price">—</div>
         <div id="chg24" class="chg">24h —</div>
       </div>
@@ -80,16 +91,9 @@
           <tbody id="trigBody"></tbody>
         </table>
       </div>
-      <div class="jactions"><button id="btnBacktest" class="btn ghost">Backtest 5M (~5 ngày)</button></div>
-      <div id="btBox" class="btbox"></div>
-      <div class="jactions"><button id="btnOptimize" class="btn primary">Tối ưu 30 ngày</button></div>
-      <div id="optBox" class="btbox"></div>
-      <div class="rp">
-        <h3 class="jh3">Soi lại thời điểm <span class="muted">— vì sao lúc đó có/không có tín hiệu</span></h3>
-        <div class="jactions"><input type="datetime-local" id="rpTime" /><button id="btnReplay" class="btn ghost">Soi lại 3 giờ</button></div>
-        <div id="rpBox" class="btbox"></div>
-      </div>
     </section>
+    </div>
+    <div class="view hidden" data-view="analysis">
     <section class="card">
       <div class="section-head">
         <h2>Đa khung</h2>
@@ -114,54 +118,32 @@
       </div>
       <pre id="orderBox" class="order">Đang tính setup…</pre>
     </section>
-    <section class="two">
+      <section class="two one">
       <article class="card">
         <div class="section-head">
           <h2>Nhật ký theo giờ</h2>
-          <span class="muted">Tự quét mỗi 60 phút</span>
+          <span class="muted">Mọi cặp · quét mỗi 60 phút</span>
         </div>
         <ul id="logList" class="log"></ul>
       </article>
-      <article class="card">
-        <h2>Rule cố định</h2>
-        <ol class="rules">
-          <li>Đồng pha = 1D + 4H + 1H cùng hướng EMA9/21, 15M không ngược mạnh. 5M chỉ timing. *MACD(12,26,9) chỉ hiển thị để tham khảo, không phải điều kiện.</li>
-          <li>Cảnh báo chỉ khi đồng pha VÀ chạm BB trên ≥2 khung, trong đó có ≥1 khung 1H/4H/1D.</li>
-          <li>Long thuận trend: ưu tiên chạm lower. Không chase upper weekly/daily.</li>
-          <li>Short chỉ khi HTF đã bear. SL/TP viết tới 2 số thập phân.</li>
-          <li>SL = đáy (đỉnh) nến tín hiệu ∓ 0.5×ATR. Vào 3 phần: giá đóng / hồi 50% nến / BB mid. Bỏ lệnh nếu rủi ro &gt; 2×ATR. TP1 = 1.5R (dời SL về giá vào), TP2 = 3R hoặc BB 1H nếu xa hơn. Khối lượng = vốn × % rủi ro ÷ (giá vào TB − SL).</li>
-          <li>Nến tín hiệu 5M/15M (bộ mới, mặc định): ATR + volume + Setup A (pullback lấy lại BB mid) / Setup B (bứt phá sau nén) — chi tiết ở ô Nến tín hiệu. Bộ cũ (range ≥ $0.55) vẫn chọn được trong Cài đặt.</li>
-          <li>Tự quản size/leverage. Futures có thể mất hết tài khoản.</li>
-        </ol>
-        <div class="settings">
-          <label>Vốn ($) <input type="number" id="inpAcct" min="0" step="10" inputmode="decimal" placeholder="vd 1000" /></label>
-          <label>Rủi ro mỗi lệnh (%) <input type="number" id="inpRisk" min="0.1" max="5" step="0.1" inputmode="decimal" /></label>
-          <label>Bộ điều kiện nến
-            <select id="selRule"><option value="atr">Mới: ATR + volume + Setup A/B</option><option value="fixed">Cũ: range ≥ $0.55</option></select>
-          </label>
-          <label><input type="checkbox" id="chkSetupA" /> Setup A (pullback)</label>
-          <label><input type="checkbox" id="chkSetupB" /> Setup B (bứt phá sau nén)</label>
-          <label><input type="checkbox" id="chkSession" /> Tránh giờ funding / tin / thanh khoản thấp</label>
-          <label><input type="checkbox" id="chkWalk" /> Cho vào khi 1H bám BB (Momentum, ½ khối lượng)</label>
-          <label><input type="checkbox" id="chkSetupS1" /> Short S1 · hồi chạm EMA21/BB mid bị từ chối</label>
-          <label><input type="checkbox" id="chkSetupS2" /> Short S2 · thủng đáy 12 nến (½ khối lượng)</label>
-          <label><input type="checkbox" id="chkSetupS3" /> Short S3 · 1H chạm BB trên thất bại</label>
-          <label><input type="checkbox" id="chkM4H" /> Momentum 4H/1H (chỉ Short) · không chờ 1D: 4H+1H giảm, 15M+5M giảm và cùng chạm BB dưới (½ khối lượng)</label>
-          <label><input type="checkbox" id="chkCorrective" /> Short điều chỉnh · 1D còn tăng nhưng giá thủng BB mid 1D (S1/S3, ½ khối lượng)</label>
-          <label><input type="checkbox" id="chkSound" checked /> Âm báo khi cảnh báo</label>
-          <label><input type="checkbox" id="chkWake" /> Giữ màn hình sáng khi mở app (để quét kịp mỗi 5 phút, tốn pin)</label>
-          <div class="jactions"><button id="btnTestNotify" class="btn ghost">Gửi thông báo thử</button></div>
-          <div id="notifyDiag" class="muted notifydiag"></div>
-          <label>Làm mới giá
-            <select id="selPrice">
-              <option value="15">15 giây</option>
-              <option value="30" selected>30 giây</option>
-              <option value="60">60 giây</option>
-            </select>
-          </label>
-        </div>
-      </article>
-    </section>
+      </section>
+    </div>
+    <div class="view hidden" data-view="tools">
+      <section class="card" id="toolsCard">
+        <div class="section-head"><h2>Công cụ kiểm chứng</h2><span class="pill">Cặp: <b id="toolsPair">SOL</b></span></div>
+        <p class="muted">Các công cụ dưới đây đo trên <b>cặp đang chọn ở thanh trên cùng</b>, bằng dữ liệu Binance thật. Muốn đo cặp khác thì chọn tab cặp đó rồi quay lại đây.</p>
+      <div class="jactions"><button id="btnBacktest" class="btn ghost">Backtest 5M (~5 ngày)</button></div>
+      <div id="btBox" class="btbox"></div>
+      <div class="jactions"><button id="btnOptimize" class="btn primary">Tối ưu 30 ngày</button></div>
+      <div id="optBox" class="btbox"></div>
+      <div class="rp">
+        <h3 class="jh3">Soi lại thời điểm <span class="muted">— vì sao lúc đó có/không có tín hiệu</span></h3>
+        <div class="jactions"><input type="datetime-local" id="rpTime" /><button id="btnReplay" class="btn ghost">Soi lại 3 giờ</button></div>
+        <div id="rpBox" class="btbox"></div>
+      </div>
+      </section>
+    </div>
+    <div class="view hidden" data-view="journal">
     <section class="card" id="journalCard">
       <div class="section-head">
         <h2>Nhật ký giao dịch hằng ngày</h2>
@@ -217,8 +199,62 @@
       </div>
       <p class="muted">Dữ liệu chỉ nằm trên máy này. Nên bấm Sao lưu cuối mỗi tuần và cất file vào Google Drive.</p>
     </section>
+    </div>
+    <div class="view hidden" data-view="settings">
+      <section class="card">
+        <div class="section-head"><h2>Cài đặt chung</h2><span class="muted">Áp dụng cho mọi cặp</span></div>
+        <div class="settings">
+          <label>Vốn ($) <input type="number" id="inpAcct" min="0" step="10" inputmode="decimal" placeholder="vd 1000" /></label>
+          <label>Rủi ro mỗi lệnh (%) <input type="number" id="inpRisk" min="0.1" max="5" step="0.1" inputmode="decimal" /></label>
+          <label>Làm mới giá
+            <select id="selPrice"><option value="15">15 giây</option><option value="30" selected>30 giây</option><option value="60">60 giây</option></select>
+          </label>
+          <label><input type="checkbox" id="chkSound" checked /> Âm báo khi cảnh báo</label>
+          <label><input type="checkbox" id="chkWake" /> Giữ màn hình sáng khi mở app (để quét kịp mỗi 5 phút, tốn pin)</label>
+          <div class="jactions"><button id="btnTestNotify" class="btn ghost">Gửi thông báo thử</button></div>
+          <div id="notifyDiag" class="muted notifydiag"></div>
+        </div>
+      </section>
+      <section class="card">
+        <div class="section-head"><h2>Tín hiệu cho cặp</h2><span class="pill"><b id="setPair">SOL</b></span></div>
+        <p class="muted">Bật/tắt từng loại tín hiệu <b>riêng cho cặp đang chọn</b>: mỗi cặp có thể dùng bộ khác nhau (kết quả của Tối ưu 30 ngày cũng chỉ áp dụng cho cặp đó).</p>
+        <div class="settings">
+          <label id="ruleRow">Bộ điều kiện nến (chỉ SOL)
+            <select id="selRule"><option value="atr">Mới: ATR + volume + Setup A/B</option><option value="fixed">Cũ: range ≥ $0.55</option></select>
+          </label>
+          <label><input type="checkbox" id="chkSetupA" /> Long A · pullback lấy lại BB mid</label>
+          <label><input type="checkbox" id="chkSetupB" /> Long B · bứt phá sau nén</label>
+          <label><input type="checkbox" id="chkSetupS1" /> Short S1 · hồi chạm EMA21/BB mid bị từ chối</label>
+          <label><input type="checkbox" id="chkSetupS2" /> Short S2 · thủng đáy 12 nến (½ khối lượng)</label>
+          <label><input type="checkbox" id="chkSetupS3" /> Short S3 · 1H chạm BB trên thất bại</label>
+          <label><input type="checkbox" id="chkM4H" /> Momentum 4H/1H (chỉ Short) · 4H+1H giảm, 15M+5M cùng chạm BB dưới (½ khối lượng)</label>
+          <label><input type="checkbox" id="chkCorrective" /> Short điều chỉnh · 1D còn tăng nhưng giá thủng BB mid 1D (½ khối lượng)</label>
+          <label><input type="checkbox" id="chkWalk" /> Cho vào khi 1H/4H bám BB (½ khối lượng)</label>
+          <label><input type="checkbox" id="chkSession" /> Tránh giờ funding / tin Mỹ / thanh khoản thấp</label>
+        </div>
+      </section>
+      <article class="card">
+        <h2>Rule cố định</h2>
+        <ol class="rules">
+          <li>Đồng pha = 1D + 4H + 1H cùng hướng EMA9/21, 15M không ngược mạnh. 5M chỉ timing. *MACD(12,26,9) chỉ hiển thị để tham khảo, không phải điều kiện.</li>
+          <li>Cảnh báo chỉ khi đồng pha VÀ chạm BB trên ≥2 khung, trong đó có ≥1 khung 1H/4H/1D.</li>
+          <li>Long thuận trend: ưu tiên chạm lower. Không chase upper weekly/daily.</li>
+          <li>Short chỉ khi HTF đã bear. SL/TP viết tới 2 số thập phân.</li>
+          <li>SL = đáy (đỉnh) nến tín hiệu ∓ 0.5×ATR. Vào 3 phần: giá đóng / hồi 50% nến / BB mid. Bỏ lệnh nếu rủi ro &gt; 2×ATR. TP1 = 1.5R (dời SL về giá vào), TP2 = 3R hoặc BB 1H nếu xa hơn. Khối lượng = vốn × % rủi ro ÷ (giá vào TB − SL).</li>
+          <li>Nến tín hiệu 5M/15M (bộ mới, mặc định): ATR + volume + Setup A (pullback lấy lại BB mid) / Setup B (bứt phá sau nén) — chi tiết ở ô Nến tín hiệu. Bộ cũ (range ≥ $0.55, chỉ dùng cho SOL) vẫn chọn được trong Cài đặt.</li>
+          <li>Tự quản size/leverage. Futures có thể mất hết tài khoản.</li>
+        </ol>
+      </article>
+    </div>
   </main>
   <footer>SOLPHA Desk · dữ liệu Binance public API · không phải tư vấn tài chính</footer>
+  <nav class="botnav" id="botNav" aria-label="Điều hướng">
+    <button data-view="signal" class="active"><span class="ic">📈</span>Tín hiệu</button>
+    <button data-view="analysis"><span class="ic">📊</span>Phân tích</button>
+    <button data-view="tools"><span class="ic">🧪</span>Công cụ</button>
+    <button data-view="journal"><span class="ic">📝</span>Nhật ký</button>
+    <button data-view="settings"><span class="ic">⚙️</span>Cài đặt</button>
+  </nav>
   <script src="signals.js"></script>
   <script src="app.js"></script>
   <script src="journal.js"></script>

@@ -10,12 +10,29 @@ const store = {
   get(k, d) { try { return localStorage.getItem(k) ?? d; } catch (_) { return d; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} }
 };
-let lastAlertKey = store.get("solpha_last_alert", "");
 // Mỗi tín hiệu (khung + nến + hướng) chỉ báo một lần; danh sách lưu lại để quét bù không báo trùng.
 const seenKeys = (() => { try { return new Set(JSON.parse(store.get("solpha_seen", "[]"))); } catch (_) { return new Set(); } })();
 function markSeen(key) { seenKeys.add(key); store.set("solpha_seen", JSON.stringify([...seenKeys].slice(-300))); }
 let scanning = false, lastScanAt = 0, wakeLock = null;
-let lastFunding = null;
+// ---- Nhiều cặp: mỗi cặp có dữ liệu, tín hiệu, cài đặt và kế hoạch lệnh riêng ----
+const DEFAULT_PAIRS = ["SOL", "BTC", "ETH"];
+const symOf = (base) => base + "USDT";
+const baseOf = (sym) => sym.replace(/USDT$/, "");
+let pairs = (() => {
+  try { const a = JSON.parse(store.get("solpha_pairs", "null")); if (Array.isArray(a)) { const ok = a.filter((b) => /^[A-Z0-9]{2,12}$/.test(b)); if (ok.length) return ok; } } catch (_) {}
+  return DEFAULT_PAIRS.slice();
+})();
+let active = (() => { const a = store.get("solpha_active", "SOLUSDT"); return pairs.includes(baseOf(a)) ? a : symOf(pairs[0]); })();
+const state = {};
+const stOf = (sym) => (state[sym] || (state[sym] = { sym }));
+// SOL giữ nguyên tên khoá cũ (không mất cài đặt đã lưu); cặp khác thêm hậu tố ":BTCUSDT"...
+const pkey = (key, sym = active) => (sym === "SOLUSDT" ? key : `${key}:${sym}`);
+const pget = (key, def, sym = active) => store.get(pkey(key, sym), def);
+const keyPrefix = (sym) => (sym === "SOLUSDT" ? "" : sym + "-");
+// Số lẻ giá theo mức giá của cặp (BTC/ETH/SOL: 2; coin giá nhỏ hiện nhiều số lẻ hơn).
+let curDec = 2;
+const decFor = (p) => (p >= 10 ? 2 : p >= 1 ? 3 : p >= 0.1 ? 4 : p >= 0.01 ? 5 : 6);
+const fmtQty = (q) => (q >= 100 ? q.toFixed(0) : q >= 1 ? q.toFixed(2) : q >= 0.1 ? q.toFixed(3) : q.toFixed(4));
 let deferredPrompt = null;
 let priceTimer = null;
 let hourTimer = null;
@@ -78,6 +95,7 @@ function fmt(n, d = 2) {
   if (n == null || Number.isNaN(n)) return "—";
   return Number(n).toFixed(d);
 }
+function fp(n) { return fmt(n, curDec); }
 function nowVN() {
   return new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
 }
@@ -98,35 +116,34 @@ async function withBase(pathSpot, pathFutures) {
   }
   throw new Error(errors.join(" | "));
 }
-async function loadTicker() {
+async function loadTicker(sym) {
+  const { data, source } = await withBase(`/api/v3/ticker/24hr?symbol=${sym}`, `/fapi/v1/ticker/24hr?symbol=${sym}`);
+  const t = { last: Number(data.lastPrice), mark: Number(data.lastPrice), chg: Number(data.priceChangePercent), high: Number(data.highPrice), low: Number(data.lowPrice), source, funding: null };
   try {
-    const { data, source } = await withBase("/api/v3/ticker/24hr?symbol=SOLUSDT", "/fapi/v1/ticker/24hr?symbol=SOLUSDT");
-    $("lastPrice").textContent = "$" + fmt(data.lastPrice);
-    $("markPrice").textContent = "$" + fmt(data.lastPrice);
-    const chg = Number(data.priceChangePercent);
-    $("chg24").textContent = `24h ${chg >= 0 ? "+" : ""}${fmt(chg)}%`;
-    $("chg24").className = "chg " + (chg >= 0 ? "up" : "down");
-    $("high24").textContent = "$" + fmt(data.highPrice);
-    $("low24").textContent = "$" + fmt(data.lowPrice);
-    $("source").textContent = source;
-  } catch (e) {
-    $("source").textContent = "Lỗi API";
-    console.error(e);
-  }
-  try {
-    const { data } = await withBase("/fapi/v1/premiumIndex?symbol=SOLUSDT", "/fapi/v1/premiumIndex?symbol=SOLUSDT");
-    if (data && data.markPrice) $("markPrice").textContent = "$" + fmt(data.markPrice);
-    if (data && data.lastFundingRate != null) lastFunding = Number(data.lastFundingRate);
-    if (data && data.lastFundingRate != null) $("funding").textContent = (Number(data.lastFundingRate) * 100).toFixed(4) + "%";
+    const { data: d2 } = await withBase(`/fapi/v1/premiumIndex?symbol=${sym}`, `/fapi/v1/premiumIndex?symbol=${sym}`);
+    if (d2 && d2.markPrice) t.mark = Number(d2.markPrice);
+    if (d2 && d2.lastFundingRate != null) t.funding = Number(d2.lastFundingRate);
   } catch (_) {}
+  return t;
 }
-async function loadKlinesUntil(interval, limit, endTime) {
-  const q = `symbol=SOLUSDT&interval=${interval}&limit=${limit}&endTime=${endTime}`;
+function renderTicker(t) {
+  curDec = decFor(t.last);
+  $("lastPrice").textContent = "$" + fp(t.last);
+  $("markPrice").textContent = "$" + fp(t.mark);
+  $("chg24").textContent = `24h ${t.chg >= 0 ? "+" : ""}${fmt(t.chg)}%`;
+  $("chg24").className = "chg " + (t.chg >= 0 ? "up" : "down");
+  $("high24").textContent = "$" + fp(t.high);
+  $("low24").textContent = "$" + fp(t.low);
+  $("source").textContent = t.source;
+  $("funding").textContent = t.funding == null ? "—" : (t.funding * 100).toFixed(4) + "%";
+}
+async function loadKlinesUntil(sym, interval, limit, endTime) {
+  const q = `symbol=${sym}&interval=${interval}&limit=${limit}&endTime=${endTime}`;
   const { data } = await withBase(`/api/v3/klines?${q.replace(`limit=${limit}`, `limit=${Math.min(limit, 1000)}`)}`, `/fapi/v1/klines?${q}`);
   return data.map((k) => ({ t: k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5] }));
 }
-async function loadKlines(interval, limit = 220) {
-  const { data } = await withBase(`/api/v3/klines?symbol=SOLUSDT&interval=${interval}&limit=${Math.min(limit, 1000)}`, `/fapi/v1/klines?symbol=SOLUSDT&interval=${interval}&limit=${limit}`);
+async function loadKlines(sym, interval, limit = 220) {
+  const { data } = await withBase(`/api/v3/klines?symbol=${sym}&interval=${interval}&limit=${Math.min(limit, 1000)}`, `/fapi/v1/klines?symbol=${sym}&interval=${interval}&limit=${limit}`);
   return data.map((k) => ({ t: k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5] }));
 }
 function analyze(candles) {
@@ -147,20 +164,19 @@ function analyze(candles) {
   return { last, e9, e21, rsi: r, bb, dir, band, candles, macd: md };
 }
 // ---- Nến tín hiệu (bộ máy trong signals.js) ----
-function sigOptions() {
+function sigOptions(sym = active) {
+  const g = (k) => pget(k, "1", sym) === "1";
   return {
-    rule: store.get("solpha_rule", "atr"),
-    sessionFilter: store.get("solpha_session", "1") === "1",
-    allowBandWalk: store.get("solpha_walk", "1") === "1",
-    allowCorrective: store.get("solpha_corrective", "1") === "1",
-    allowMomentum4H: store.get("solpha_m4h", "1") === "1",
-    setups: {
-      A: store.get("solpha_setupA", "1") === "1", B: store.get("solpha_setupB", "1") === "1",
-      S1: store.get("solpha_setupS1", "1") === "1", S2: store.get("solpha_setupS2", "1") === "1", S3: store.get("solpha_setupS3", "1") === "1"
-    }
+    rule: sym === "SOLUSDT" ? store.get("solpha_rule", "atr") : "atr", // "bộ cũ range ≥ $0.55" chỉ có nghĩa với SOL
+    sessionFilter: g("solpha_session"),
+    allowBandWalk: g("solpha_walk"),
+    allowCorrective: g("solpha_corrective"),
+    allowMomentum4H: g("solpha_m4h"),
+    setups: { A: g("solpha_setupA"), B: g("solpha_setupB"), S1: g("solpha_setupS1"), S2: g("solpha_setupS2"), S3: g("solpha_setupS3") }
   };
 }
-function htfContext(map, align) {
+function htfContext(map, align, funding, opt) {
+  const O = { ...SolphaSignals.DEFAULTS, ...opt };
   const h1 = map["1h"], P1 = SolphaSignals.prepare(h1.candles), P4 = SolphaSignals.prepare(map["4h"].candles), PD = SolphaSignals.prepare(map["1d"].candles);
   let h1RejectUpper = false;
   for (let j = h1.candles.length - 2; j >= h1.candles.length - 3; j--) if (P1.bb[j] && h1.candles[j].h >= P1.bb[j].upper) h1RejectUpper = true;
@@ -169,12 +185,12 @@ function htfContext(map, align) {
     down: align.d1 === "giam" && align.h4 === "giam" && align.h1 === "giam",
     chaseUp: ["1h", "4h", "1d"].filter((k) => map[k].band === "upper").map((k) => k.toUpperCase()),
     chaseDown: ["1h", "4h", "1d"].filter((k) => map[k].band === "lower").map((k) => k.toUpperCase()),
-    walkLong: SolphaSignals.bandWalk(P1, h1.candles.length - 2, "long", { ...SolphaSignals.DEFAULTS, ...sigOptions() }),
-    walkShort: SolphaSignals.bandWalk(P1, h1.candles.length - 2, "short", { ...SolphaSignals.DEFAULTS, ...sigOptions() }),
-    walk4hLong: SolphaSignals.bandWalk(P4, map["4h"].candles.length - 2, "long", { ...SolphaSignals.DEFAULTS, ...sigOptions() }),
-    walk4hShort: SolphaSignals.bandWalk(P4, map["4h"].candles.length - 2, "short", { ...SolphaSignals.DEFAULTS, ...sigOptions() }),
-    walk1dLong: SolphaSignals.bandWalk(PD, map["1d"].candles.length - 2, "long", { ...SolphaSignals.DEFAULTS, ...sigOptions() }),
-    walk1dShort: SolphaSignals.bandWalk(PD, map["1d"].candles.length - 2, "short", { ...SolphaSignals.DEFAULTS, ...sigOptions() }),
+    walkLong: SolphaSignals.bandWalk(P1, h1.candles.length - 2, "long", O),
+    walkShort: SolphaSignals.bandWalk(P1, h1.candles.length - 2, "short", O),
+    walk4hLong: SolphaSignals.bandWalk(P4, map["4h"].candles.length - 2, "long", O),
+    walk4hShort: SolphaSignals.bandWalk(P4, map["4h"].candles.length - 2, "short", O),
+    walk1dLong: SolphaSignals.bandWalk(PD, map["1d"].candles.length - 2, "long", O),
+    walk1dShort: SolphaSignals.bandWalk(PD, map["1d"].candles.length - 2, "short", O),
     h1Upper: h1.bb && h1.bb.upper, h1Lower: h1.bb && h1.bb.lower, h1RejectUpper,
     m15Down: align.m15 === "giam",
     // 4H/1H chạm BB dưới: 2 nến đã đóng gần nhất, hoặc nến đang chạy đã xuống dưới dải.
@@ -183,11 +199,11 @@ function htfContext(map, align) {
     d1Dir: align.d1, h4Dir: align.h4, h1Dir: align.h1,
     d1Mid: map["1d"].bb && map["1d"].bb.mid, d1Lower: map["1d"].bb && map["1d"].bb.lower,
     h1Close: h1.candles[h1.candles.length - 2].c, h1Ema21: P1.ema21[h1.candles.length - 2], h1Rsi: P1.rsi[h1.candles.length - 2],
-    funding: lastFunding
+    funding
   };
 }
-function candleTrigger(map, align) {
-  const htf = htfContext(map, align), opt = sigOptions();
+function candleTrigger(map, align, funding, sym) {
+  const opt = sigOptions(sym), htf = htfContext(map, align, funding, opt);
   const P = {};
   const rows = [["5m", 5], ["15m", 15]].map(([key, min]) => {
     const candles = map[key].candles; P[key] = SolphaSignals.prepare(candles);
@@ -210,36 +226,39 @@ function renderTrigger(trig) {
   $("trigBody").innerHTML = trig.map((x) => {
     const time = new Date(x.t).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" });
     const sig = x.side ? `<span class="tag ${x.side === "long" ? "tang" : "giam"}">${x.side.toUpperCase()}${x.corrective ? " ĐC" : ""} ${x.setup}${x.momentum ? " ·M" : ""}</span>` : '<span class="tag in">—</span>';
-    return `<tr><td><b>${x.label}</b> ${time}</td><td>${fmt(x.o)} → ${fmt(x.c)}</td><td>${fmt(x.range)}${x.atrMult ? ` (${fmt(x.atrMult, 1)}×ATR)` : ""}</td><td>${x.volMult ? fmt(x.volMult, 1) + "×" : "—"}</td><td>${x.pos != null ? Math.round(x.pos * 100) + "%" : "—"}</td><td>${sig}</td><td class="muted">${x.side ? "Đủ điều kiện" : x.why.join(" · ") || "—"}</td></tr>`;
+    return `<tr><td><b>${x.label}</b> ${time}</td><td>${fp(x.o)} → ${fp(x.c)}</td><td>${fp(x.range)}${x.atrMult ? ` (${fmt(x.atrMult, 1)}×ATR)` : ""}</td><td>${x.volMult ? fmt(x.volMult, 1) + "×" : "—"}</td><td>${x.pos != null ? Math.round(x.pos * 100) + "%" : "—"}</td><td>${sig}</td><td class="muted">${x.side ? "Đủ điều kiện" : x.why.join(" · ") || "—"}</td></tr>`;
   }).join("");
 }
-// Ô Ưu tiên: kế hoạch lệnh của tín hiệu gần nhất (giữ 30 phút).
-function planText(x) {
-  const p = x.plan, acct = Number(store.get("solpha_acct", "0")), riskPct = Number(store.get("solpha_risk", "1")) * (p.sizeFactor || 1);
+// Ô Ưu tiên: kế hoạch lệnh của tín hiệu gần nhất (giữ 30 phút), lưu riêng từng cặp.
+function planText(x, sym) {
+  const coin = baseOf(sym), p = x.plan, acct = Number(store.get("solpha_acct", "0")), riskPct = Number(store.get("solpha_risk", "1")) * (p.sizeFactor || 1);
   const riskUsd = acct * riskPct / 100, qty = riskUsd && p.risk ? riskUsd / p.risk : 0;
   return {
-    head: p.momentum4h ? `${x.side === "long" ? "LONG" : "SHORT"} MOMENTUM 4H/1H · 5M+15M chạm ${x.side === "long" ? "BB trên" : "BB dưới"} · ½ khối lượng${x.d1Against ? " · ⚠ ngược 1D" : ""}`
-      : `${x.side === "long" ? "LONG" : "SHORT"}${p.corrective ? " ĐIỀU CHỈNH" : ""} · Setup ${x.setup} · ${x.label}${(p.sizeFactor || 1) < 1 ? " · ½ khối lượng" : ""}`,
+    head: `${coin} · ` + (p.momentum4h ? `${x.side === "long" ? "LONG" : "SHORT"} MOMENTUM 4H/1H · 5M+15M chạm ${x.side === "long" ? "BB trên" : "BB dưới"} · ½ khối lượng${x.d1Against ? " · ⚠ ngược 1D" : ""}`
+      : `${x.side === "long" ? "LONG" : "SHORT"}${p.corrective ? " ĐIỀU CHỈNH" : ""} · Setup ${x.setup} · ${x.label}${(p.sizeFactor || 1) < 1 ? " · ½ khối lượng" : ""}`),
     lines: [
-      `Vào 3 phần: ${p.entries.map((e) => fmt(e)).join(" / ")} (TB ${fmt(p.entry)})`,
-      `SL: ${fmt(p.sl)} (rủi ro ${fmt(p.risk)}/SOL)`,
-      `TP1: ${fmt(p.tp1)} (R:R 1:${fmt(p.rr1, 1)}) → ${p.partialTP1 ? "chốt ½, " : ""}dời SL về giá vào`,
-      `TP2: ${fmt(p.tp2)} (R:R 1:${fmt(p.rr2, 1)})`,
-      qty ? `Khối lượng: ${fmt(qty, 2)} SOL ≈ $${fmt(qty * p.entry, 0)} · đòn bẩy ≈ ${fmt(qty * p.entry / acct, 1)}x (rủi ro $${fmt(riskUsd, 0)} = ${riskPct}% vốn), mỗi phần ${fmt(qty / 3, 2)} SOL`
+      `Vào 3 phần: ${p.entries.map((e) => fp(e)).join(" / ")} (TB ${fp(p.entry)})`,
+      `SL: ${fp(p.sl)} (rủi ro ${fp(p.risk)}/${coin})`,
+      `TP1: ${fp(p.tp1)} (R:R 1:${fmt(p.rr1, 1)}) → ${p.partialTP1 ? "chốt ½, " : ""}dời SL về giá vào`,
+      `TP2: ${fp(p.tp2)} (R:R 1:${fmt(p.rr2, 1)})`,
+      qty ? `Khối lượng: ${fmtQty(qty)} ${coin} ≈ $${fmt(qty * p.entry, 0)} · đòn bẩy ≈ ${fmt(qty * p.entry / acct, 1)}x (rủi ro $${fmt(riskUsd, 0)} = ${riskPct}% vốn), mỗi phần ${fmtQty(qty / 3)} ${coin}`
           : "Nhập vốn ở mục Cài đặt để app tính khối lượng.",
       ...(p.timeStopBars ? [`Giới hạn thời gian: chưa chạm TP1 sau ${Math.round(p.timeStopBars * 5 / 60 * 10) / 10} giờ → thoát lệnh`] : []),
       ...(p.momentum4h ? ["Vào theo đà khi giá đang ở dải BB: dễ bị giật ngược — chỉ ½ khối lượng, không gồng lỗ, chạm SL là thoát."] : [])
     ]
   };
 }
-function renderPlan(trig) {
+function persistPlan(sym, trig) {
   const hit = trig.find((x) => x.side && x.key === "5m") || trig.find((x) => x.side && x.key === "15m") || trig.find((x) => x.side);
-  if (hit) store.set("solpha_last_plan", JSON.stringify({ x: hit, exp: Date.now() + 30 * 60000 }));
-  let saved = null;
-  try { saved = JSON.parse(store.get("solpha_last_plan", "null")); } catch (_) {}
-  const card = $("planCard");
-  if (saved && saved.exp > Date.now()) {
-    const t = planText(saved.x);
+  if (hit) store.set(pkey("solpha_last_plan", sym), JSON.stringify({ x: hit, exp: Date.now() + 30 * 60000 }));
+}
+function savedPlan(sym) {
+  try { const s = JSON.parse(pget("solpha_last_plan", "null", sym)); return s && s.exp > Date.now() ? s : null; } catch (_) { return null; }
+}
+function renderPlan(sym) {
+  const saved = savedPlan(sym), card = $("planCard");
+  if (saved) {
+    const t = planText(saved.x, sym);
     card.className = "card status " + (saved.x.side === "long" ? "ok" : "bad");
     $("biasText").textContent = t.head;
     $("planBox").innerHTML = t.lines.map((l) => `<div>${l}</div>`).join("") + `<div class="muted">Nến ${new Date(saved.x.t).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" })} · hết hạn sau ${Math.ceil((saved.exp - Date.now()) / 60000)}′</div>`;
@@ -272,7 +291,7 @@ function buildOrder(price, map, align, bands) {
       "KHÔNG CẢNH BÁO — chưa đồng pha / chưa chạm BB đủ điều kiện.",
       `1D ${align.d1.toUpperCase()} · 4H ${align.h4.toUpperCase()} · 1H ${align.h1.toUpperCase()} · 15M ${align.m15.toUpperCase()}`,
       `MACD hist: 1D ${align.macdD1} · 4H ${align.macdH4} · 1H ${align.macdH1}${align.macdAligned ? " (cùng pha)" : " (lệch pha)"} — tham khảo`,
-      `Giá hiện tại: ${fmt(price)}`,
+      `Giá hiện tại: ${fp(price)}`,
       "Ưu tiên: WAIT. Không chase, không đoán.",
       "App sẽ tự viết lệnh khi 1D+4H+1H cùng hướng và ≥2 khung chạm band (có khung ≥1H)."
     ].join("\n");
@@ -282,40 +301,41 @@ function buildOrder(price, map, align, bands) {
   const bbD = map["1d"].bb;
   const hitUpper = bands.hits.filter((h) => h.band === "upper").length >= 1;
   const hitLower = bands.hits.filter((h) => h.band === "lower").length >= 1;
-  const lines = ["**CẢNH BÁO ĐỒNG PHA + BB**", `Thời điểm: ${nowVN()} (+07)`, `Giá: ${fmt(price)}`, `Hits: ${bands.hits.map((h) => h.label + " " + h.band).join(", ")}`, ""];
+  const o35 = price * 0.003, o25 = price * 0.0023, o20 = price * 0.0018; // đệm theo % giá (trước đây là $ cố định cho SOL)
+  const lines = ["**CẢNH BÁO ĐỒNG PHA + BB**", `Thời điểm: ${nowVN()} (+07)`, `Giá: ${fp(price)}`, `Hits: ${bands.hits.map((h) => h.label + " " + h.band).join(", ")}`, ""];
   if (align.dir === "tang" && hitLower) {
     const entryA = bb4 ? bb4.mid : price * 0.985;
-    const sl = bb4 ? bb4.lower - 0.2 : price * 0.96;
+    const sl = bb4 ? bb4.lower - o20 : price * 0.96;
     const tp1 = bb1 ? bb1.upper : price * 1.02;
     const tp2 = bbD ? bbD.upper : price * 1.04;
     const risk = Math.abs(price - sl) || 1;
     const rr = Math.abs(tp1 - price) / risk;
     lines.push(
       "Hướng: LONG (thuận 1D/4H, phản ứng BB dưới)",
-      `Entry zone: ${fmt(Math.min(price, entryA))} – ${fmt(Math.max(price, entryA))}`,
-      `Stop Loss: ${fmt(sl)}`, `TP1: ${fmt(tp1)}`, `TP2: ${fmt(tp2)}`,
-      `R:R tới TP1 ≈ 1:${fmt(rr, 1)}`, `Invalidation: nến 4H đóng dưới ${fmt(sl)}`,
+      `Entry zone: ${fp(Math.min(price, entryA))} – ${fp(Math.max(price, entryA))}`,
+      `Stop Loss: ${fp(sl)}`, `TP1: ${fp(tp1)}`, `TP2: ${fp(tp2)}`,
+      `R:R tới TP1 ≈ 1:${fmt(rr, 1)}`, `Invalidation: nến 4H đóng dưới ${fp(sl)}`,
       "Nhắc: setup tham khảo, không phải lệnh đặt sẵn trên sàn."
     );
   } else if (align.dir === "giam" && hitUpper) {
-    const sl = (bb1 ? bb1.upper : price) + 0.25;
+    const sl = (bb1 ? bb1.upper : price) + o25;
     const tp1 = bb4 ? bb4.mid : price * 0.98;
     const tp2 = bb4 ? bb4.lower : price * 0.96;
     const risk = Math.abs(sl - price) || 1;
     const rr = Math.abs(price - tp1) / risk;
     lines.push(
       "Hướng: SHORT (HTF bear + chạm BB trên)",
-      `Entry zone: ${fmt(price)} – ${fmt(price + 0.35)}`,
-      `Stop Loss: ${fmt(sl)}`, `TP1: ${fmt(tp1)}`, `TP2: ${fmt(tp2)}`,
-      `R:R tới TP1 ≈ 1:${fmt(rr, 1)}`, `Invalidation: nến 1H đóng trên ${fmt(sl)}`,
+      `Entry zone: ${fp(price)} – ${fp(price + o35)}`,
+      `Stop Loss: ${fp(sl)}`, `TP1: ${fp(tp1)}`, `TP2: ${fp(tp2)}`,
+      `R:R tới TP1 ≈ 1:${fmt(rr, 1)}`, `Invalidation: nến 1H đóng trên ${fp(sl)}`,
       "Nhắc: setup tham khảo, không phải lệnh đặt sẵn trên sàn."
     );
   } else if (align.dir === "tang" && hitUpper) {
     lines.push(
       "Hướng: KHÔNG LONG chase.",
       "Đồng pha tăng nhưng đang chạm BB trên — stretch.",
-      `Chờ pullback về 4H mid ${bb4 ? fmt(bb4.mid) : "—"} mới xét long.`,
-      `SL tham chiếu nếu vẫn muốn plan: ${bb4 ? fmt(bb4.lower - 0.2) : "—"}`,
+      `Chờ pullback về 4H mid ${bb4 ? fp(bb4.mid) : "—"} mới xét long.`,
+      `SL tham chiếu nếu vẫn muốn plan: ${bb4 ? fp(bb4.lower - o20) : "—"}`,
       "Ưu tiên: WAIT."
     );
   } else {
@@ -326,9 +346,9 @@ function buildOrder(price, map, align, bands) {
 function renderTable(map) {
   $("tfBody").innerHTML = TFS.map((tf) => {
     const a = map[tf.key];
-    const emaTxt = a.e9 && a.e21 ? `${fmt(a.e9)} / ${fmt(a.e21)}` : "—";
+    const emaTxt = a.e9 && a.e21 ? `${fp(a.e9)} / ${fp(a.e21)}` : "—";
     const bandLabel = a.band === "upper" ? "CHẠM UPPER" : a.band === "lower" ? "CHẠM LOWER" : "Trong band";
-    return `<tr><td><b>${tf.label}</b></td><td><span class="tag ${a.dir}">${a.dir.toUpperCase()}</span></td><td>${fmt(a.rsi, 1)}</td><td>${emaTxt}</td><td>${a.macd ? `<span class="tag ${a.macd.dir}">${fmt(a.macd.hist, 3)}</span>` : "—"}</td><td>${a.bb ? fmt(a.bb.upper) : "—"}</td><td>${a.bb ? fmt(a.bb.mid) : "—"}</td><td>${a.bb ? fmt(a.bb.lower) : "—"}</td><td>${a.bb ? fmt(a.bb.pctB, 2) : "—"}</td><td><span class="tag ${a.band}">${bandLabel}</span></td></tr>`;
+    return `<tr><td><b>${tf.label}</b></td><td><span class="tag ${a.dir}">${a.dir.toUpperCase()}</span></td><td>${fmt(a.rsi, 1)}</td><td>${emaTxt}</td><td>${a.macd ? `<span class="tag ${a.macd.dir}">${fmt(a.macd.hist, 3)}</span>` : "—"}</td><td>${a.bb ? fp(a.bb.upper) : "—"}</td><td>${a.bb ? fp(a.bb.mid) : "—"}</td><td>${a.bb ? fp(a.bb.lower) : "—"}</td><td>${a.bb ? fmt(a.bb.pctB, 2) : "—"}</td><td><span class="tag ${a.band}">${bandLabel}</span></td></tr>`;
   }).join("");
 }
 function setStatus(align, bands) {
@@ -351,12 +371,12 @@ function setStatus(align, bands) {
 function addLog(text, alert) {
   const logs = JSON.parse(localStorage.getItem("solpha_logs") || "[]");
   logs.unshift({ t: nowVN(), text, alert: !!alert });
-  localStorage.setItem("solpha_logs", JSON.stringify(logs.slice(0, 48)));
+  localStorage.setItem("solpha_logs", JSON.stringify(logs.slice(0, 150)));
   renderLogs();
 }
 function renderLogs() {
   const logs = JSON.parse(localStorage.getItem("solpha_logs") || "[]");
-  $("logList").innerHTML = logs.length ? logs.map((l) => `<li>${l.alert ? "⚠ " : "• "}<b>${l.t}</b> — ${l.text}</li>`).join("") : "<li>Chưa có nhật ký.</li>";
+  $("logList").innerHTML = logs.length ? logs.slice(0, 60).map((l) => `<li>${l.alert ? "⚠ " : "• "}<b>${l.t}</b> — ${l.text}</li>`).join("") : "<li>Chưa có nhật ký.</li>";
 }
 function nextHourLabel() {
   const d = new Date();
@@ -388,48 +408,101 @@ function beep() {
     g.gain.setValueAtTime(0.05, ctx.currentTime); o.start(); o.stop(ctx.currentTime + 0.18);
   } catch (_) {}
 }
-async function fullScan(reason = "manual") {
+// Quét một cặp: tính toàn bộ, lưu vào state[sym], gửi cảnh báo (mọi cặp, không chỉ cặp đang xem).
+async function scanPair(sym, reason, gapMin) {
+  const st = stOf(sym), coin = baseOf(sym), opt = sigOptions(sym);
+  try { st.ticker = await loadTicker(sym); st.funding = st.ticker.funding; } catch (e) { st.tickerError = String(e.message || e); }
+  const entries = await Promise.all(TFS.map(async (tf) => [tf.key, analyze(await loadKlines(sym, tf.binance))]));
+  const map = Object.fromEntries(entries);
+  const price = map["5m"].last;
+  curDec = decFor(price);
+  const align = alignment(map), bands = bandHits(map), fire = align.aligned && bands.ready;
+  const trig = candleTrigger(map, align, st.funding, sym);
+  Object.assign(st, { map, align, bands, trig, price, fire, error: null, updated: nowVN() });
+  st.order = buildOrder(price, map, align, bands);
+  persistPlan(sym, trig);
+  const summary = fire ? `CẢNH BÁO ${align.dir} @ ${fp(price)} · ${bands.hits.map((h) => h.label).join(",")}` : `WAIT ${fp(price)} · 1D ${align.d1} / 4H ${align.h4} / 1H ${align.h1}`;
+  if (reason === "hourly" || reason === "boot") addLog(`[${coin}] ${summary}`, fire);
+  if (fire) {
+    const key = `${align.dir}-${bands.hits.map((h) => h.key + h.band).join("")}-${Math.round(Math.log(price) / 0.005)}`; // đổi sau mỗi ~0.5% giá
+    const lk = pkey("solpha_last_alert", sym);
+    if (key !== store.get(lk, "")) {
+      store.set(lk, key);
+      await notify(`SOLPHA · ${coin} cảnh báo`, `[${coin}] ${summary}`, `solpha-${coin}`);
+    }
+  }
+  for (const x of trig.filter((t) => t.side)) {
+    const key = `${keyPrefix(sym)}${x.key}-${x.t}-${x.side}`;
+    if (seenKeys.has(key)) continue;
+    markSeen(key);
+    const p = x.plan;
+    const msg = `[${coin}] ${x.side.toUpperCase()}${x.engine === "m4h" ? " MOMENTUM 4H/1H (½ size" + (x.d1Against ? ", ngược 1D" : "") + ")" : ""}${x.corrective ? " ĐIỀU CHỈNH (½ size)" : ""} Setup ${x.setup} ${x.label}${x.momentum ? " (Momentum ½ size)" : ""} · vào ${fp(p.entries[0])}/${fp(p.entries[1])}/${fp(p.entries[2])} · SL ${fp(p.sl)} · TP1 ${fp(p.tp1)} (1:${fmt(p.rr1, 1)}) · TP2 ${fp(p.tp2)} (1:${fmt(p.rr2, 1)})`;
+    addLog(msg, true);
+    await notify(`SOLPHA · ${coin} nến tín hiệu`, msg, `solpha-${coin}`);
+  }
+  await catchUp(sym, map, gapMin);
+}
+// Vẽ một cặp lên màn hình từ dữ liệu đã quét.
+function renderPair(sym) {
+  const st = stOf(sym), coin = baseOf(sym);
+  $("heroPair").textContent = `${sym}.P`;
+  $("toolsPair").textContent = $("setPair").textContent = coin;
+  if (!st.map) {
+    $("trigText").textContent = st.error ? "Lỗi tải dữ liệu" : "Đang quét…";
+    $("trigWhy").textContent = st.error || "";
+    $("orderBox").textContent = st.error ? "Lỗi tải dữ liệu: " + st.error : "Đang tính setup…";
+    return;
+  }
+  curDec = decFor(st.price);
+  if (st.ticker) renderTicker(st.ticker);
+  renderTable(st.map);
+  setStatus(st.align, st.bands);
+  renderTrigger(st.trig);
+  if (!renderPlan(sym) && !st.fire) $("biasText").textContent = "WAIT";
+  $("orderBox").textContent = (st.error ? "⚠ Lần quét gần nhất lỗi: " + st.error + "\n(đang hiện dữ liệu lần trước)\n\n" : "") + st.order;
+  $("updated").textContent = st.updated;
+  $("missedBox").innerHTML = st.missedHtml || "";
+  const bd = badgeFor(sym);
+  $("heroBadge").className = "pbadge " + bd.cls;
+  $("heroBadge").textContent = bd.txt;
+}
+function badgeFor(sym) {
+  const st = stOf(sym);
+  if (!st.map) return { cls: "wait", txt: "…" };
+  const live = st.trig && st.trig.find((x) => x.side), saved = savedPlan(sym);
+  const side = live ? live.side : saved ? saved.x.side : null;
+  if (side) return { cls: side, txt: side.toUpperCase() };
+  if (st.fire) return { cls: "warn", txt: "CHÚ Ý" };
+  return { cls: "wait", txt: "CHỜ" };
+}
+function renderTabs() {
+  const tabs = pairs.map((b) => {
+    const sym = symOf(b), st = stOf(sym), t = st.ticker, bd = badgeFor(sym);
+    const price = t ? `<span class="pprice">${fmt(t.last, decFor(t.last))}</span><span class="pchg ${t.chg >= 0 ? "up" : "down"}">${t.chg >= 0 ? "+" : ""}${t.chg.toFixed(1)}%</span>` : `<span class="pprice">…</span>`;
+    return `<button class="ptab ${sym === active ? "active" : ""}" data-sym="${sym}"><span class="pname">${b}</span>${price}<span class="pbadge ${bd.cls}">${bd.txt}</span></button>`;
+  }).join("");
+  $("pairBar").innerHTML = tabs + `<button class="ptab add" id="btnAddPair" aria-label="Thêm / quản lý cặp">＋</button>`;
+}
+async function refreshTickers() {
+  await Promise.all(pairs.map(async (b) => {
+    const sym = symOf(b), st = stOf(sym);
+    try { st.ticker = await loadTicker(sym); st.funding = st.ticker.funding; } catch (_) {}
+  }));
+  renderTabs();
+  const st = stOf(active);
+  if (st.ticker) renderTicker(st.ticker);
+}
+async function fullScan(reason = "manual", onlyActive = false) {
   if (scanning) return;
   scanning = true;
   const gapMin = lastScanAt ? (Date.now() - lastScanAt) / 60000 : 0; // app "ngủ" bao lâu trước lần quét này
   $("livePill").textContent = "SCAN";
-  try {
-    await loadTicker();
-    const entries = await Promise.all(TFS.map(async (tf) => [tf.key, analyze(await loadKlines(tf.binance))]));
-    const map = Object.fromEntries(entries);
-    const price = map["5m"].last;
-    const align = alignment(map);
-    const bands = bandHits(map);
-    renderTable(map);
-    const fire = setStatus(align, bands);
-    const trig = candleTrigger(map, align);
-    renderTrigger(trig);
-    if (!renderPlan(trig) && !fire) $("biasText").textContent = "WAIT";
-    $("orderBox").textContent = buildOrder(price, map, align, bands);
-    $("updated").textContent = nowVN();
-    const summary = fire ? `CẢNH BÁO ${align.dir} @ ${fmt(price)} · ${bands.hits.map((h) => h.label).join(",")}` : `WAIT ${fmt(price)} · 1D ${align.d1} / 4H ${align.h4} / 1H ${align.h1}`;
-    if (reason === "hourly" || reason === "boot") addLog(summary, fire);
-    if (fire) {
-      const key = `${align.dir}-${bands.hits.map((h) => h.key + h.band).join("")}-${Math.round(price)}`;
-      if (key !== lastAlertKey) {
-        lastAlertKey = key;
-        store.set("solpha_last_alert", key);
-        await notify("SOLPHA cảnh báo", summary);
-      }
-    }
-    for (const x of trig.filter((t) => t.side)) {
-      const key = `${x.key}-${x.t}-${x.side}`;
-      if (seenKeys.has(key)) continue;
-      markSeen(key);
-      const p = x.plan;
-      const msg = `${x.side.toUpperCase()}${x.engine === "m4h" ? " MOMENTUM 4H/1H (½ size" + (x.d1Against ? ", ngược 1D" : "") + ")" : ""}${x.corrective ? " ĐIỀU CHỈNH (½ size)" : ""} Setup ${x.setup} ${x.label}${x.momentum ? " (Momentum ½ size)" : ""} · vào ${fmt(p.entries[0])}/${fmt(p.entries[1])}/${fmt(p.entries[2])} · SL ${fmt(p.sl)} · TP1 ${fmt(p.tp1)} (1:${fmt(p.rr1, 1)}) · TP2 ${fmt(p.tp2)} (1:${fmt(p.rr2, 1)})`;
-      addLog(msg, true);
-      await notify("SOLPHA nến tín hiệu", msg);
-    }
-    await catchUp(map, gapMin);
-  } catch (e) {
-    $("orderBox").textContent = "Lỗi tải dữ liệu: " + (e.message || e);
-    addLog("Lỗi API: " + (e.message || e), false);
+  const order = onlyActive ? [active] : [active, ...pairs.map(symOf).filter((s) => s !== active)]; // cặp đang xem quét trước
+  for (const sym of order) {
+    try { await scanPair(sym, reason, gapMin); }
+    catch (e) { stOf(sym).error = String(e.message || e); addLog(`[${baseOf(sym)}] Lỗi API: ${stOf(sym).error}`, false); }
+    if (sym === active) renderPair(sym);
+    renderTabs();
   }
   $("livePill").textContent = "LIVE";
   nextHourLabel();
@@ -438,32 +511,32 @@ async function fullScan(reason = "manual") {
 }
 // Quét bù: xem lại các nến 5M đã đóng trong 90 phút qua bằng đúng bộ máy tín hiệu, liệt kê tín hiệu (kể cả khi app "ngủ"
 // lúc nó xảy ra) và báo bù những tín hiệu chưa từng báo. Không áp dụng bộ lọc funding trừ khi funding hiện tại đã quá âm.
-async function catchUp(map, gapMin) {
-  const box = $("missedBox"); if (!box) return;
+async function catchUp(sym, map, gapMin) {
+  const st = stOf(sym), coin = baseOf(sym), pre = keyPrefix(sym);
   const closed = (k) => map[k].candles.slice(0, -1);
   const c5 = closed("5m"); if (c5.length < 120) return;
   const to = c5[c5.length - 1].t, from = to - 17 * 5 * 60000;
   let rows = [];
-  try { rows = SolphaSignals.replay(c5, closed("1h"), closed("4h"), closed("1d"), closed("15m"), from, to, sigOptions()); } catch (_) { return; }
-  const fundingBlocks = lastFunding != null && lastFunding <= SolphaSignals.DEFAULTS.fundingMin;
+  try { rows = SolphaSignals.replay(c5, closed("1h"), closed("4h"), closed("1d"), closed("15m"), from, to, sigOptions(sym)); } catch (_) { return; }
+  const fundingBlocks = st.funding != null && st.funding <= SolphaSignals.DEFAULTS.fundingMin;
   const items = [];
   for (const r of rows) {
-    if (r.main.side && !(fundingBlocks && r.main.side === "short")) items.push({ key: `5m-${r.t}-${r.main.side}`, t: r.t, sig: r.main, tag: r.main.corrective ? "ĐC " + r.main.setup : r.main.setup });
-    if (r.mom.side && !fundingBlocks) items.push({ key: `m4h-${r.t}-short`, t: r.t, sig: r.mom, tag: "M4H" });
+    if (r.main.side && !(fundingBlocks && r.main.side === "short")) items.push({ key: `${pre}5m-${r.t}-${r.main.side}`, t: r.t, sig: r.main, tag: r.main.corrective ? "ĐC " + r.main.setup : r.main.setup });
+    if (r.mom.side && !fundingBlocks) items.push({ key: `${pre}m4h-${r.t}-short`, t: r.t, sig: r.mom, tag: "M4H" });
   }
   items.sort((a, b) => b.t - a.t);
   const hm = (t) => new Date(t).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" });
   const missed = items.filter((x) => !seenKeys.has(x.key));
   const sleep = gapMin >= 8 ? `<div class="muted">App vừa thức dậy sau ${Math.round(gapMin)} phút "ngủ" — đã quét bù các nến trong lúc đó.</div>` : "";
-  box.innerHTML = sleep + (items.length ? `<div class="muted"><b>Tín hiệu 90 phút qua</b></div>` + items.map((x) => {
+  st.missedHtml = sleep + (items.length ? `<div class="muted"><b>Tín hiệu 90 phút qua · ${coin}</b></div>` + items.map((x) => {
     const p = x.sig.plan, age = Math.round((Date.now() - (x.t + 300000)) / 60000), isMiss = !seenKeys.has(x.key);
-    return `<div class="mrow ${isMiss ? "miss" : ""}"><b>${hm(x.t)}</b> · ${x.sig.side.toUpperCase()} ${x.tag}${(p.sizeFactor || 1) < 1 ? " ½" : ""} · ${age}′ trước · vào ${fmt(p.entries[0])} · SL ${fmt(p.sl)} · TP1 ${fmt(p.tp1)}${isMiss ? ' <span class="tag giam">BỎ LỠ</span>' : ""}</div>`;
+    return `<div class="mrow ${isMiss ? "miss" : ""}"><b>${hm(x.t)}</b> · ${x.sig.side.toUpperCase()} ${x.tag}${(p.sizeFactor || 1) < 1 ? " ½" : ""} · ${age}′ trước · vào ${fp(p.entries[0])} · SL ${fp(p.sl)} · TP1 ${fp(p.tp1)}${isMiss ? ' <span class="tag giam">BỎ LỠ</span>' : ""}</div>`;
   }).join("") + `<div class="muted">Tín hiệu quá 30′ tuổi: giá đã đi xa, cân nhắc kỹ trước khi vào.</div>` : "");
   if (missed.length) {
     missed.forEach((x) => markSeen(x.key));
-    const msg = `Bỏ lỡ ${missed.length} tín hiệu: ` + missed.slice(0, 4).map((x) => `${hm(x.t)} ${x.sig.side.toUpperCase()} ${x.tag}`).join(" · ") + " — mở app xem kế hoạch lệnh";
+    const msg = `[${coin}] Bỏ lỡ ${missed.length} tín hiệu: ` + missed.slice(0, 4).map((x) => `${hm(x.t)} ${x.sig.side.toUpperCase()} ${x.tag}`).join(" · ") + " — mở app xem kế hoạch lệnh";
     addLog(msg, true);
-    if (document.visibilityState !== "visible") await notify("SOLPHA — tín hiệu bỏ lỡ", msg, "solpha-missed");
+    if (document.visibilityState !== "visible") await notify(`SOLPHA · ${coin} — tín hiệu bỏ lỡ`, msg, `solpha-missed-${coin}`);
   }
 }
 // App thức dậy (mở lại / quay lại từ app khác): quét ngay thay vì chờ mốc 5 phút kế tiếp.
@@ -494,7 +567,7 @@ function scheduleHourly() {
 function schedulePrice() {
   clearInterval(priceTimer);
   const sec = Number($("selPrice").value || 30);
-  priceTimer = setInterval(loadTicker, sec * 1000);
+  priceTimer = setInterval(refreshTickers, sec * 1000);
 }
 window.addEventListener("beforeinstallprompt", (e) => {
   e.preventDefault(); deferredPrompt = e; $("btnInstall").classList.remove("hidden");
@@ -515,44 +588,95 @@ $("btnRefresh").addEventListener("click", () => fullScan("manual"));
 $("selPrice").addEventListener("change", schedulePrice);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js", { scope: "./" }).catch(() => {});
 if ("Notification" in window && Notification.permission === "granted") $("btnNotify").textContent = "Cảnh báo đã bật";
-renderLogs(); schedulePrice(); scheduleHourly(); fullScan("boot");
+renderLogs(); schedulePrice(); scheduleHourly(); renderTabs(); refreshTickers(); fullScan("boot");
 // Quét ngay sau mỗi mốc 5 phút (+8s) để bắt từng nến 5M vừa đóng.
 (function scheduleWatch() {
   const ms = 5 * 60 * 1000 - (Date.now() % (5 * 60 * 1000)) + 8000;
   setTimeout(() => { fullScan("watch"); scheduleWatch(); }, ms);
 })();
 
-// ---- Cài đặt tín hiệu & quản lý vốn ----
+// ---- Cài đặt: vốn/rủi ro dùng chung; các điều kiện tín hiệu lưu riêng từng cặp ----
+const SETTING_CHECKS = [["chkSetupA", "solpha_setupA"], ["chkSetupB", "solpha_setupB"], ["chkSetupS1", "solpha_setupS1"], ["chkSetupS2", "solpha_setupS2"], ["chkSetupS3", "solpha_setupS3"], ["chkCorrective", "solpha_corrective"], ["chkM4H", "solpha_m4h"], ["chkWalk", "solpha_walk"], ["chkSession", "solpha_session"]];
+function syncSettingsUI() {
+  for (const [id, key] of SETTING_CHECKS) if ($(id)) $(id).checked = pget(key, "1") === "1";
+  if ($("selRule")) $("selRule").value = store.get("solpha_rule", "atr");
+  if ($("ruleRow")) $("ruleRow").classList.toggle("hidden", active !== "SOLUSDT");
+}
 (function initSettings() {
-  const bind = (id, key, def, isCheck) => {
+  const share = (id, key, def) => {
     const el = $(id); if (!el) return;
-    if (isCheck) el.checked = store.get(key, def) === "1"; else el.value = store.get(key, def);
-    el.addEventListener("change", () => { store.set(key, isCheck ? (el.checked ? "1" : "0") : el.value); fullScan("manual"); });
+    el.value = store.get(key, def);
+    el.addEventListener("change", () => { store.set(key, el.value); fullScan("manual"); });
   };
-  bind("inpAcct", "solpha_acct", "", false);
-  bind("inpRisk", "solpha_risk", "1", false);
-  bind("selRule", "solpha_rule", "atr", false);
-  bind("chkSetupA", "solpha_setupA", "1", true);
-  bind("chkSetupB", "solpha_setupB", "1", true);
-  bind("chkSession", "solpha_session", "1", true);
-  bind("chkWalk", "solpha_walk", "1", true);
-  bind("chkSetupS1", "solpha_setupS1", "1", true);
-  bind("chkSetupS2", "solpha_setupS2", "1", true);
-  bind("chkSetupS3", "solpha_setupS3", "1", true);
-  bind("chkCorrective", "solpha_corrective", "1", true);
-  bind("chkM4H", "solpha_m4h", "1", true);
+  share("inpAcct", "solpha_acct", "");
+  share("inpRisk", "solpha_risk", "1");
+  if ($("selRule")) $("selRule").addEventListener("change", () => { store.set("solpha_rule", $("selRule").value); fullScan("manual", true); });
+  for (const [id, key] of SETTING_CHECKS) {
+    const el = $(id); if (!el) continue;
+    el.addEventListener("change", () => { store.set(pkey(key), el.checked ? "1" : "0"); fullScan("manual", true); });
+  }
+  syncSettingsUI();
   // Giữ màn hình sáng: bind riêng (không quét lại khi đổi) vì phải xin khoá màn hình.
   const w = $("chkWake");
   if (w) { w.checked = store.get("solpha_wake", "0") === "1"; w.addEventListener("change", () => { store.set("solpha_wake", w.checked ? "1" : "0"); setWake(w.checked); }); if (w.checked) setWake(true); }
 })();
+
+// ---- Tab cặp, màn hình (thanh dưới), thêm / xoá cặp ----
+function switchPair(sym) {
+  if (!pairs.includes(baseOf(sym))) return;
+  active = sym; store.set("solpha_active", sym);
+  curDec = decFor((stOf(sym).price) || 1);
+  syncSettingsUI(); renderPair(sym); renderTabs(); renderOptHint();
+  for (const id of ["btBox", "rpBox"]) if ($(id)) $(id).innerHTML = "";
+  if (!stOf(sym).map) fullScan("manual", true);
+}
+function showView(name) {
+  document.querySelectorAll(".view").forEach((v) => v.classList.toggle("hidden", v.dataset.view !== name));
+  document.querySelectorAll("#botNav button").forEach((b) => b.classList.toggle("active", b.dataset.view === name));
+  store.set("solpha_view", name); window.scrollTo(0, 0);
+}
+function renderPairList() {
+  $("pairList").innerHTML = pairs.map((b) => `<span class="pchip">${b}${pairs.length > 1 ? `<button data-rm="${b}" aria-label="Xoá ${b}">✕</button>` : ""}</span>`).join("");
+}
+async function addPair() {
+  const raw = ($("addInput").value || "").trim().toUpperCase().replace(/USDT(\.P)?$/, ""), msg = $("addMsg");
+  if (!/^[A-Z0-9]{2,12}$/.test(raw)) { msg.textContent = "Nhập mã coin hợp lệ, ví dụ BNB."; return; }
+  if (pairs.includes(raw)) { msg.textContent = raw + " đã có trong danh sách."; return; }
+  if (pairs.length >= 8) { msg.textContent = "Tối đa 8 cặp để quét kịp mỗi 5 phút."; return; }
+  msg.textContent = "Đang kiểm tra " + raw + "USDT trên Binance…";
+  try { await loadTicker(symOf(raw)); } catch (_) { msg.textContent = raw + "USDT không có trên Binance Futures."; return; }
+  pairs.push(raw); store.set("solpha_pairs", JSON.stringify(pairs));
+  $("addInput").value = ""; msg.textContent = "Đã thêm " + raw + ".";
+  renderPairList(); switchPair(symOf(raw));
+}
+function removePair(b) {
+  if (pairs.length <= 1 || !pairs.includes(b)) return;
+  pairs = pairs.filter((x) => x !== b); store.set("solpha_pairs", JSON.stringify(pairs));
+  delete state[symOf(b)];
+  renderPairList();
+  if (active === symOf(b)) switchPair(symOf(pairs[0])); else renderTabs();
+}
+$("pairBar").addEventListener("click", (e) => {
+  const t = e.target.closest(".ptab"); if (!t) return;
+  if (t.id === "btnAddPair") { $("addPanel").classList.toggle("hidden"); renderPairList(); return; }
+  switchPair(t.dataset.sym);
+});
+$("btnAddPair2").addEventListener("click", addPair);
+$("addInput").addEventListener("keydown", (e) => { if (e.key === "Enter") addPair(); });
+$("pairList").addEventListener("click", (e) => { const b = e.target.closest("[data-rm]"); if (b) removePair(b.dataset.rm); });
+$("botNav").addEventListener("click", (e) => { const b = e.target.closest("button[data-view]"); if (b) showView(b.dataset.view); });
+renderPairList();
+showView(store.get("solpha_view", "signal"));
+
 // ---- Backtest: so bộ cũ ($0.55) với bộ mới (ATR + volume + Setup A/B) trên dữ liệu thật của Binance ----
 $("btnBacktest").addEventListener("click", async () => {
   const btn = $("btnBacktest"), out = $("btBox");
-  btn.disabled = true; out.innerHTML = "Đang tải ~1.500 nến 5M và khung lớn từ Binance…";
+  const sym = active;
+  btn.disabled = true; out.innerHTML = `Đang tải ~1.500 nến 5M và khung lớn của ${baseOf(sym)} từ Binance…`;
   try {
-    const [c5, h1, h4, d1, m15] = await Promise.all([loadKlines("5m", 1500), loadKlines("1h", 400), loadKlines("4h", 300), loadKlines("1d", 200), loadKlines("15m", 700)]);
+    const [c5, h1, h4, d1, m15] = await Promise.all([loadKlines(sym, "5m", 1500), loadKlines(sym, "1h", 400), loadKlines(sym, "4h", 300), loadKlines(sym, "1d", 200), loadKlines(sym, "15m", 700)]);
     const closed = (a) => a.slice(0, -1);
-    const base = sigOptions();
+    const base = sigOptions(sym);
     const rows = [
       ["Bộ cũ ($0.55) · 2 chiều", { ...base, rule: "fixed", sessionFilter: false }],
       ["LONG A + B", { ...base, rule: "atr", only: "long" }],
@@ -569,7 +693,7 @@ $("btnBacktest").addEventListener("click", async () => {
     ].map(([name, o]) => [name, SolphaSignals.backtest(closed(c5), closed(h1), closed(h4), closed(d1), o, 5, closed(m15))]);
     const r0 = rows[0][1];
     const day = (t) => new Date(t).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
-    out.innerHTML = `<div class="muted">Từ ${day(r0.from)} đến ${day(r0.to)} · vào ở giá đóng nến, chốt ở 1.5R; Long tối đa 4 giờ, Short tối đa 2 giờ. Nến chạm cả SL và TP tính là thua. Backtest Short bỏ qua bộ lọc funding (không có dữ liệu lịch sử).</div>
+    out.innerHTML = `<div class="muted"><b>${baseOf(sym)}</b> · từ ${day(r0.from)} đến ${day(r0.to)} · vào ở giá đóng nến, chốt ở 1.5R; Long tối đa 4 giờ, Short tối đa 2 giờ. Nến chạm cả SL và TP tính là thua. Backtest Short bỏ qua bộ lọc funding (không có dữ liệu lịch sử).</div>
       <div class="table-wrap"><table><thead><tr><th>Bộ điều kiện</th><th>Số lệnh</th><th>Thắng</th><th>R TB/lệnh</th><th>Tổng R</th><th>Sụt tối đa</th></tr></thead><tbody>${rows.map(([n, r]) =>
         `<tr><td><b>${n}</b></td><td>${r.n}</td><td>${r.n ? Math.round(r.winRate * 100) + "%" : "—"}</td><td class="${r.avgR >= 0 ? "up" : "down"}">${r.n ? (r.avgR >= 0 ? "+" : "") + fmt(r.avgR) : "—"}</td><td class="${r.totalR >= 0 ? "up" : "down"}">${(r.totalR >= 0 ? "+" : "") + fmt(r.totalR, 1)}R</td><td>${fmt(r.maxDD, 1)}R</td></tr>`).join("")}</tbody></table></div>
       ${[["LONG", rows[1][1]], ["SHORT", rows[5][1]], ["SHORT điều chỉnh", rows[7][1]], ["MOMENTUM 4H/1H SHORT", rows[8][1]]].map(([n, r]) => r.topWhy && r.topWhy.length ? `<div class="muted"><b>${n}</b> bị loại nhiều nhất vì: ${r.topWhy.slice(0, 3).map(([w, c]) => `${w.replace(/#/g, "x")} (${c})`).join(" · ")}</div>` : "").join("")}
@@ -596,25 +720,27 @@ $("btnBacktest").addEventListener("click", async () => {
     if (!Number.isFinite(T)) { out.textContent = "Chọn ngày giờ hợp lệ."; return; }
     const from = T - 30 * 60000, to = Math.min(T + 3 * 3600000, Date.now() - 5 * 60000), end = to + 5 * 60000;
     if (to <= from) { out.textContent = "Thời điểm này chưa có dữ liệu (ở tương lai hoặc vừa mới xảy ra)."; return; }
-    btn.disabled = true; out.textContent = "Đang tải dữ liệu Binance quanh thời điểm này…";
+    const sym = active;
+    btn.disabled = true; out.textContent = `Đang tải dữ liệu ${baseOf(sym)} quanh thời điểm này…`;
     try {
-      const [c5, m15, h1, h4, d1] = await Promise.all([loadKlinesUntil("5m", 400, end), loadKlinesUntil("15m", 300, end), loadKlinesUntil("1h", 300, end), loadKlinesUntil("4h", 200, end), loadKlinesUntil("1d", 150, end)]);
-      const rows = SolphaSignals.replay(c5, h1, h4, d1, m15, from, to, sigOptions());
+      const [c5, m15, h1, h4, d1] = await Promise.all([loadKlinesUntil(sym, "5m", 400, end), loadKlinesUntil(sym, "15m", 300, end), loadKlinesUntil(sym, "1h", 300, end), loadKlinesUntil(sym, "4h", 200, end), loadKlinesUntil(sym, "1d", 150, end)]);
+      curDec = decFor(c5[c5.length - 1].c);
+      const rows = SolphaSignals.replay(c5, h1, h4, d1, m15, from, to, sigOptions(sym));
       const hits = rows.filter((r) => r.main.side || r.mom.side);
-      out.innerHTML = `<div class="muted">${rows.length} nến 5M từ ${hm(from)} đến ${hm(to)} (giờ VN). ${hits.length ? "Có tín hiệu lúc: " + hits.map((r) => `<b>${hm(r.t)}</b> ${r.main.side ? r.main.side.toUpperCase() + " " + r.main.setup : ""}${r.mom.side ? " " + r.mom.side.toUpperCase() + " M4H" : ""}`).join(" · ") : "<b>Không có tín hiệu nào</b> — xem cột lý do bên dưới."} Bộ lọc funding không áp dụng khi xem lại.</div>
+      out.innerHTML = `<div class="muted"><b>${baseOf(sym)}</b> · ${rows.length} nến 5M từ ${hm(from)} đến ${hm(to)} (giờ VN). ${hits.length ? "Có tín hiệu lúc: " + hits.map((r) => `<b>${hm(r.t)}</b> ${r.main.side ? r.main.side.toUpperCase() + " " + r.main.setup : ""}${r.mom.side ? " " + r.mom.side.toUpperCase() + " M4H" : ""}`).join(" · ") : "<b>Không có tín hiệu nào</b> — xem cột lý do bên dưới."} Bộ lọc funding không áp dụng khi xem lại.</div>
         <div class="table-wrap rpwrap"><table><thead><tr><th>Giờ</th><th>Mở → Đóng</th><th>1D 4H 1H 15M</th><th>Bộ chính</th><th>Momentum 4H/1H</th></tr></thead><tbody>${rows.map((r) =>
-          `<tr class="${r.main.side || r.mom.side ? "rphit" : ""}"><td><b>${hm(r.t)}</b></td><td>${fmt(r.o)} → ${fmt(r.c)}</td><td>${arrow(r.dirs.d1)} ${arrow(r.dirs.h4)} ${arrow(r.dirs.h1)} ${arrow(r.dirs.m15)}</td><td>${cell(r.main)}</td><td>${cell(r.mom)}</td></tr>`).join("")}</tbody></table></div>`;
+          `<tr class="${r.main.side || r.mom.side ? "rphit" : ""}"><td><b>${hm(r.t)}</b></td><td>${fp(r.o)} → ${fp(r.c)}</td><td>${arrow(r.dirs.d1)} ${arrow(r.dirs.h4)} ${arrow(r.dirs.h1)} ${arrow(r.dirs.m15)}</td><td>${cell(r.main)}</td><td>${cell(r.mom)}</td></tr>`).join("")}</tbody></table></div>`;
     } catch (e) { out.textContent = "Lỗi tải dữ liệu: " + (e.message || e); }
     btn.disabled = false;
   });
 })();
 
 // ---- Tối ưu 30 ngày: đo từng điều kiện trên dữ liệu Binance thật, chỉ giữ điều kiện đạt chuẩn ----
-async function loadHistory(interval, minutes, days, warmup) {
+async function loadHistory(sym, interval, minutes, days, warmup) {
   const need = Math.ceil(days * 1440 / minutes) + warmup, out = [];
   let end = Date.now();
   while (out.length < need) {
-    const batch = await loadKlinesUntil(interval, 1500, end);
+    const batch = await loadKlinesUntil(sym, interval, 1500, end);
     if (!batch.length) break;
     const fresh = batch.filter((k) => !out.length || k.t < out[0].t);
     if (!fresh.length) break;
@@ -636,12 +762,12 @@ const OPT_ITEMS = [
 ];
 let optResult = null;
 $("btnOptimize") && $("btnOptimize").addEventListener("click", async () => {
-  const btn = $("btnOptimize"), out = $("optBox"), tick = () => new Promise((r) => setTimeout(r, 0));
+  const btn = $("btnOptimize"), out = $("optBox"), tick = () => new Promise((r) => setTimeout(r, 0)), sym = active, coin = baseOf(sym);
   btn.disabled = true;
   try {
-    out.textContent = "Đang tải 30 ngày dữ liệu Binance (5M, 15M, 1H, 4H, 1D)…";
-    const [c5, m15, h1, h4, d1] = await Promise.all([loadHistory("5m", 5, 30, 120), loadHistory("15m", 15, 30, 120), loadHistory("1h", 60, 30, 300), loadHistory("4h", 240, 30, 200), loadHistory("1d", 1440, 30, 150)]);
-    const closed = (a) => a.slice(0, -1), base = { ...sigOptions(), rule: "atr", sessionFilter: true, allowBandWalk: true };
+    out.textContent = `Đang tải 30 ngày dữ liệu ${coin} (5M, 15M, 1H, 4H, 1D)…`;
+    const [c5, m15, h1, h4, d1] = await Promise.all([loadHistory(sym, "5m", 5, 30, 120), loadHistory(sym, "15m", 15, 30, 120), loadHistory(sym, "1h", 60, 30, 300), loadHistory(sym, "4h", 240, 30, 200), loadHistory(sym, "1d", 1440, 30, 150)]);
+    const closed = (a) => a.slice(0, -1), base = { ...sigOptions(sym), rule: "atr", sessionFilter: true, allowBandWalk: true };
     const run = (o) => SolphaSignals.backtest(closed(c5), closed(h1), closed(h4), closed(d1), { ...base, ...o }, 5, closed(m15));
     const mid = c5[Math.floor(c5.length / 2)].t;
     const half = (r, first) => { const t = r.trades.filter((x) => (first ? x.t < mid : x.t >= mid)); return t.length ? t.reduce((s, x) => s + x.r, 0) / t.length : null; };
@@ -665,31 +791,35 @@ $("btnOptimize") && $("btnOptimize").addEventListener("click", async () => {
         filters.push({ key, name, on, off, keep: on.n && (!off.n || on.avgR >= off.avgR) });
       }
     }
-    optResult = { rows, filters, at: Date.now(), from: c5[0].t, to: c5[c5.length - 1].t };
+    optResult = { sym, rows, filters, at: Date.now(), from: c5[0].t, to: c5[c5.length - 1].t };
     const pct = (x) => Math.round(x * 100) + "%", r2 = (x) => (x == null ? "—" : (x >= 0 ? "+" : "") + fmt(x));
     const day = (t) => new Date(t).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
     const sorted = rows.slice().sort((a, b) => (b.pass - a.pass) || (b.r.winRate - a.r.winRate) || (b.r.avgR - a.r.avgR));
-    out.innerHTML = `<div class="muted">Dữ liệu ${day(optResult.from)} → ${day(optResult.to)} · đã trừ phí ${(SolphaSignals.DEFAULTS.feeRate * 100).toFixed(2)}%/lệnh · đạt chuẩn = ≥ ${OPT_RULES.minTrades} lệnh, thắng ≥ ${pct(OPT_RULES.minWin)}, R TB sau phí &gt; 0. "Nửa đầu / nửa sau" để xem có ổn định không.</div>
+    out.innerHTML = `<div class="muted"><b>${coin}</b> · dữ liệu ${day(optResult.from)} → ${day(optResult.to)} · đã trừ phí ${(SolphaSignals.DEFAULTS.feeRate * 100).toFixed(2)}%/lệnh · đạt chuẩn = ≥ ${OPT_RULES.minTrades} lệnh, thắng ≥ ${pct(OPT_RULES.minWin)}, R TB sau phí &gt; 0. "Nửa đầu / nửa sau" để xem có ổn định không.</div>
       <div class="table-wrap"><table><thead><tr><th>Điều kiện</th><th>Lệnh</th><th>Thắng</th><th>R TB</th><th>Tổng R</th><th>Nửa đầu / sau</th><th>Kết luận</th></tr></thead><tbody>${sorted.map((x) =>
         `<tr><td><b>${x.name}</b></td><td>${x.r.n}</td><td>${x.r.n ? pct(x.r.winRate) : "—"}</td><td class="${x.r.avgR >= 0 ? "up" : "down"}">${x.r.n ? r2(x.r.avgR) : "—"}</td><td>${r2(x.r.totalR)}R</td><td>${r2(x.h1)} / ${r2(x.h2)}</td><td>${x.pass ? '<span class="tag tang">GIỮ</span>' : '<span class="tag in">TẮT</span>'}</td></tr>`).join("")}</tbody></table></div>
       ${filters.map((f) => `<div class="muted">${f.name}: bật ${f.on.n} lệnh, R TB ${r2(f.on.avgR)} · tắt ${f.off.n} lệnh, R TB ${r2(f.off.avgR)} → <b>${f.keep ? "BẬT" : "TẮT"}</b></div>`).join("")}
       ${chosen.length ? `<div class="jactions"><button id="btnApplyOpt" class="btn primary">Áp dụng: chỉ giữ ${chosen.length} điều kiện đạt chuẩn</button></div>`
         : `<div class="muted"><b>Không điều kiện nào đạt chuẩn trong 30 ngày qua</b> — giữ nguyên cài đặt hiện tại, không tự tắt hết.</div>`}`;
     $("btnApplyOpt") && $("btnApplyOpt").addEventListener("click", () => {
-      for (const x of optResult.rows) store.set(x.key, x.pass ? "1" : "0");
-      for (const f of optResult.filters) store.set(f.key, f.keep ? "1" : "0");
-      store.set("solpha_opt_applied", JSON.stringify({ at: Date.now(), keep: optResult.rows.filter((x) => x.pass).map((x) => x.name) }));
-      for (const [id, key] of [["chkSetupA", "solpha_setupA"], ["chkSetupB", "solpha_setupB"], ["chkSetupS1", "solpha_setupS1"], ["chkSetupS2", "solpha_setupS2"], ["chkSetupS3", "solpha_setupS3"], ["chkCorrective", "solpha_corrective"], ["chkM4H", "solpha_m4h"], ["chkWalk", "solpha_walk"], ["chkSession", "solpha_session"]]) if ($(id)) $(id).checked = store.get(key, "1") === "1";
+      const o = optResult.sym;
+      for (const x of optResult.rows) store.set(pkey(x.key, o), x.pass ? "1" : "0");
+      for (const f of optResult.filters) store.set(pkey(f.key, o), f.keep ? "1" : "0");
+      store.set(pkey("solpha_opt_applied", o), JSON.stringify({ at: Date.now(), keep: optResult.rows.filter((x) => x.pass).map((x) => x.name) }));
+      if (o === active) syncSettingsUI();
       $("btnApplyOpt").textContent = "Đã áp dụng ✓"; $("btnApplyOpt").disabled = true;
-      fullScan("manual");
+      fullScan("manual", true);
     });
   } catch (e) { out.textContent = "Lỗi tối ưu: " + (e.message || e); }
   btn.disabled = false;
 });
-(function showLastOpt() {
-  let a = null; try { a = JSON.parse(store.get("solpha_opt_applied", "null")); } catch (_) {}
-  if (a && $("optBox")) $("optBox").innerHTML = `<div class="muted">Lần áp dụng gần nhất: ${new Date(a.at).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })} · đang giữ: ${a.keep.join(", ") || "—"}. Nên chạy lại mỗi tuần.</div>`;
-})();
+function renderOptHint() {
+  let a = null; try { a = JSON.parse(pget("solpha_opt_applied", "null")); } catch (_) {}
+  const box = $("optBox"); if (!box) return;
+  box.innerHTML = a ? `<div class="muted">${baseOf(active)} · lần áp dụng gần nhất: ${new Date(a.at).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })} · đang giữ: ${a.keep.join(", ") || "—"}. Nên chạy lại mỗi tuần.</div>` : "";
+}
+renderOptHint();
+$("btBox") && ($("btBox").innerHTML = "");
 
 // ---- Gửi thông báo thử + chẩn đoán ----
 $("btnTestNotify") && $("btnTestNotify").addEventListener("click", async () => {
