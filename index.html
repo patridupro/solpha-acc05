@@ -223,15 +223,24 @@
         <div class="section-head"><h2>Tín hiệu cho cặp</h2><span class="pill"><b id="setPair">SOL</b></span></div>
         <p class="muted">Bật/tắt từng loại tín hiệu <b>riêng cho cặp đang chọn</b>: mỗi cặp có thể dùng bộ khác nhau (kết quả của Tối ưu 30 ngày cũng chỉ áp dụng cho cặp đó).</p>
         <div class="settings">
-          <label><input type="checkbox" id="chkSetupA" /> Long A · pullback lấy lại BB mid</label>
-          <label><input type="checkbox" id="chkSetupB" /> Long B · bứt phá sau nén</label>
-          <label><input type="checkbox" id="chkSetupS1" /> Short S1 · hồi chạm EMA21/BB mid bị từ chối</label>
-          <label><input type="checkbox" id="chkSetupS2" /> Short S2 · thủng đáy 12 nến (½ khối lượng)</label>
-          <label><input type="checkbox" id="chkSetupS3" /> Short S3 · 1H chạm BB trên thất bại</label>
-          <label><input type="checkbox" id="chkM4H" /> Momentum 4H/1H (chỉ Short) · 4H+1H giảm, 15M+5M cùng chạm BB dưới (½ khối lượng)</label>
-          <label><input type="checkbox" id="chkCorrective" /> Short điều chỉnh · 1D còn tăng nhưng giá thủng BB mid 1D (½ khối lượng)</label>
-          <label><input type="checkbox" id="chkWalk" /> Cho vào khi 1H/4H bám BB (½ khối lượng)</label>
-          <label><input type="checkbox" id="chkSession" /> Tránh giờ funding / tin Mỹ / thanh khoản thấp</label>
+          <div class="sgrp long">
+            <div class="sgrp-h">▲ LONG · mua khi 1D/4H/1H cùng tăng</div>
+            <label><input type="checkbox" id="chkSetupA" /> <span class="code long">A</span> Pullback · hồi về BB giữa rồi bật lên</label>
+            <label><input type="checkbox" id="chkSetupB" /> <span class="code long">B</span> Bứt phá sau nén · BB co hẹp rồi đóng vượt BB trên</label>
+          </div>
+          <div class="sgrp short">
+            <div class="sgrp-h">▼ SHORT · bán khi khung lớn giảm</div>
+            <label><input type="checkbox" id="chkSetupS1" /> <span class="code short">S1</span> Hồi bị từ chối · chạm EMA21/BB giữa rồi bị đạp xuống</label>
+            <label><input type="checkbox" id="chkSetupS2" /> <span class="code short">S2</span> Thủng đáy 12 nến (½ khối lượng)</label>
+            <label><input type="checkbox" id="chkSetupS3" /> <span class="code short">S3</span> 1H chạm BB trên thất bại</label>
+            <label><input type="checkbox" id="chkCorrective" /> <span class="code short">ĐC</span> Điều chỉnh · 1D còn tăng nhưng giá thủng BB giữa 1D (½)</label>
+            <label><input type="checkbox" id="chkM4H" /> <span class="code short">M4H</span> Momentum 4H/1H · 4H+1H giảm, 15M+5M cùng chạm BB dưới (½)</label>
+          </div>
+          <div class="sgrp both">
+            <div class="sgrp-h">Bộ lọc chung (cả Long và Short)</div>
+            <label><input type="checkbox" id="chkWalk" /> Cho vào khi 1H/4H bám BB (½ khối lượng)</label>
+            <label><input type="checkbox" id="chkSession" /> Tránh giờ funding / tin Mỹ / thanh khoản thấp</label>
+          </div>
         </div>
       </section>
       <article class="card">

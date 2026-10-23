@@ -231,3 +231,26 @@ input, select, textarea { color: var(--text); }
 .tag.upper { background: rgba(217,59,59,.1); }
 .tag.lower { background: rgba(24,152,72,.12); }
 @media (max-width: 900px) { .top { flex-direction: initial; align-items: center; } }
+
+/* ---- Phân nhóm LONG (xanh ▲) / SHORT (đỏ ▼) ---- */
+.code { display: inline-block; min-width: 30px; text-align: center; font-size: 11px; font-weight: 800; padding: 2px 6px; border-radius: 6px; margin-right: 6px; color: #fff; vertical-align: 1px; }
+.code.long { background: var(--up); }
+.code.short { background: var(--down); }
+.gtable tr.grp td { font-weight: 800; font-size: 12px; letter-spacing: .04em; padding: 8px; }
+.gtable tr.grp.long td { background: rgba(24,152,72,.1); color: var(--up); }
+.gtable tr.grp.short td { background: rgba(217,59,59,.08); color: var(--down); }
+.gtable tr.rl td:first-child { border-left: 4px solid var(--up); }
+.gtable tr.rs td:first-child { border-left: 4px solid var(--down); }
+.gtable td.nm { white-space: normal; min-width: 150px; }
+.gtable td, .gtable th { padding-left: 6px; padding-right: 6px; }
+.gtable td.nm small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+.why { font-size: 12px; color: var(--muted); margin: 6px 0; padding: 6px 8px; border-radius: 8px; }
+.why.long { background: rgba(24,152,72,.06); }
+.why.short { background: rgba(217,59,59,.05); }
+.sgrp { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-left-width: 4px; border-radius: 10px; }
+.sgrp.long { border-left-color: var(--up); background: rgba(24,152,72,.04); }
+.sgrp.short { border-left-color: var(--down); background: rgba(217,59,59,.03); }
+.sgrp.both { border-left-color: var(--muted); }
+.sgrp-h { font-weight: 800; font-size: 12px; letter-spacing: .04em; }
+.sgrp.long .sgrp-h { color: var(--up); }
+.sgrp.short .sgrp-h { color: var(--down); }
