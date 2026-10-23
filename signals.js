@@ -2,8 +2,6 @@
 // Candle: { t (open time ms), o, h, l, c, v }. Chỉ xét nến ĐÃ ĐÓNG.
 (function (root) {
   const DEFAULTS = {
-    rule: "atr",            // "atr" (bộ mới) | "fixed" (bộ cũ: range ≥ $0.55)
-    fixedRange: 0.55,
     atrMin: 1.3, atrMax: 3,  // range nến tín hiệu theo bội số ATR(14)
     closeZone: 0.25,         // đóng ở 25% trên (long) / dưới (short)
     volMult: 1.5,            // volume ≥ 1.5 × SMA20
@@ -128,10 +126,9 @@
     const closeTop = pos >= 1 - o.closeZone, closeBottom = pos <= o.closeZone;
     const dir = closeTop ? "long" : closeBottom ? "short" : null;
 
-    if (o.rule !== "fixed" && closeBottom) return evaluateShort(P, i, htf, tfMinutes, o, res);
+    if (closeBottom) return evaluateShort(P, i, htf, tfMinutes, o, res);
     // 1) Độ lớn nến
-    if (o.rule === "fixed") { if (range < o.fixedRange) res.why.push(`range ${range.toFixed(2)} < ${o.fixedRange}`); }
-    else if (res.atrMult < o.atrMin) res.why.push(`range ${res.atrMult.toFixed(1)}×ATR < ${o.atrMin}`);
+    if (res.atrMult < o.atrMin) res.why.push(`range ${res.atrMult.toFixed(1)}×ATR < ${o.atrMin}`);
     else if (res.atrMult > o.atrMax) res.why.push(`nến quá lớn ${res.atrMult.toFixed(1)}×ATR (tin/thanh lý)`);
     if (res.why.length) return res;
     if (!dir) { res.why.push(`đóng giữa nến (${Math.round(pos * 100)}%)`); return res; }
@@ -145,15 +142,7 @@
       if (c.ok) res.momentum = true; else { res.why.push(c.why); return res; }
     }
 
-    if (o.rule === "fixed") {
-      // Bộ cũ: short cần chạm/từ chối BB trên trong 3 nến gần nhất hoặc 2 nến 1H.
-      if (dir === "short") {
-        let touched = htf.h1RejectUpper;
-        for (let j = i; j >= i - 2 && !touched; j--) if (P.bb[j] && P.candles[j].h >= P.bb[j].upper) touched = true;
-        if (!touched) { res.why.push("chưa chạm/từ chối BB trên"); return res; }
-      }
-      res.setup = "cũ";
-    } else {
+    {
       // 3) Volume
       if (res.volMult < o.volMult) { res.why.push(`volume ${res.volMult.toFixed(1)}× < ${o.volMult}×`); return res; }
       // 4) Chống đu đỉnh / bắt đáy
@@ -441,7 +430,12 @@
       if (!sig.side) {
         // Chỉ đếm nến có hướng phù hợp (Long: đóng nửa trên; Short: đóng nửa dưới) để biết điều kiện nào chặn nhiều nhất.
         const side = o.engine === "m4h" ? o.only : sig.pos >= 0.5 ? "long" : "short"; // momentum: hướng do 4H/1H quyết định
-        if (sig.why[0] && (!o.only || o.only === side)) { const w = sig.why[0].replace(/[-\d.]+/g, "#"); why[w] = (why[w] || 0) + 1; }
+        if (sig.why[0] && (!o.only || o.only === side)) {
+          // Gộp lý do giống nhau: thay giá trị đo được bằng "…", giữ ngưỡng (sau dấu < >) và tên khung (1D/4H/1H/15M).
+          const r = sig.why[0], cut = r.search(/[<>]/), num = /(?<![A-Za-z\d.])-?\d+(?:\.\d+)?(?![DHM\d.])/g;
+          const w = cut < 0 ? r.replace(num, "…") : r.slice(0, cut).replace(num, "…") + r.slice(cut);
+          why[w] = (why[w] || 0) + 1;
+        }
         continue;
       }
       if (o.only && sig.side !== o.only) continue;

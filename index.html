@@ -223,9 +223,6 @@
         <div class="section-head"><h2>Tín hiệu cho cặp</h2><span class="pill"><b id="setPair">SOL</b></span></div>
         <p class="muted">Bật/tắt từng loại tín hiệu <b>riêng cho cặp đang chọn</b>: mỗi cặp có thể dùng bộ khác nhau (kết quả của Tối ưu 30 ngày cũng chỉ áp dụng cho cặp đó).</p>
         <div class="settings">
-          <label id="ruleRow">Bộ điều kiện nến (chỉ SOL)
-            <select id="selRule"><option value="atr">Mới: ATR + volume + Setup A/B</option><option value="fixed">Cũ: range ≥ $0.55</option></select>
-          </label>
           <label><input type="checkbox" id="chkSetupA" /> Long A · pullback lấy lại BB mid</label>
           <label><input type="checkbox" id="chkSetupB" /> Long B · bứt phá sau nén</label>
           <label><input type="checkbox" id="chkSetupS1" /> Short S1 · hồi chạm EMA21/BB mid bị từ chối</label>
@@ -245,7 +242,7 @@
           <li>Long thuận trend: ưu tiên chạm lower. Không chase upper weekly/daily.</li>
           <li>Short chỉ khi HTF đã bear. SL/TP viết tới 2 số thập phân.</li>
           <li>SL = đáy (đỉnh) nến tín hiệu ∓ 0.5×ATR. Vào 3 phần: giá đóng / hồi 50% nến / BB mid. Bỏ lệnh nếu rủi ro &gt; 2×ATR. TP1 = 1.5R (dời SL về giá vào), TP2 = 3R hoặc BB 1H nếu xa hơn. Khối lượng = vốn × % rủi ro ÷ (giá vào TB − SL).</li>
-          <li>Nến tín hiệu 5M/15M (bộ mới, mặc định): ATR + volume + Setup A (pullback lấy lại BB mid) / Setup B (bứt phá sau nén) — chi tiết ở ô Nến tín hiệu. Bộ cũ (range ≥ $0.55, chỉ dùng cho SOL) vẫn chọn được trong Cài đặt.</li>
+          <li>Nến tín hiệu 5M/15M (bộ mới, mặc định): ATR + volume + Setup A (pullback lấy lại BB mid) / Setup B (bứt phá sau nén) — chi tiết ở ô Nến tín hiệu.</li>
           <li>Tự quản size/leverage. Futures có thể mất hết tài khoản.</li>
         </ol>
       </article>

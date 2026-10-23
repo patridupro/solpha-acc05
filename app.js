@@ -186,7 +186,6 @@ function analyze(candles) {
 function sigOptions(sym = active) {
   const g = (k) => pget(k, "1", sym) === "1";
   return {
-    rule: sym === "SOLUSDT" ? store.get("solpha_rule", "atr") : "atr", // "bộ cũ range ≥ $0.55" chỉ có nghĩa với SOL
     sessionFilter: g("solpha_session"),
     allowBandWalk: g("solpha_walk"),
     allowCorrective: g("solpha_corrective"),
@@ -710,8 +709,6 @@ renderLogs(); schedulePrice(); scheduleQuarter(); renderTabs(); refreshTickers(t
 const SETTING_CHECKS = [["chkSetupA", "solpha_setupA"], ["chkSetupB", "solpha_setupB"], ["chkSetupS1", "solpha_setupS1"], ["chkSetupS2", "solpha_setupS2"], ["chkSetupS3", "solpha_setupS3"], ["chkCorrective", "solpha_corrective"], ["chkM4H", "solpha_m4h"], ["chkWalk", "solpha_walk"], ["chkSession", "solpha_session"]];
 function syncSettingsUI() {
   for (const [id, key] of SETTING_CHECKS) if ($(id)) $(id).checked = pget(key, "1") === "1";
-  if ($("selRule")) $("selRule").value = store.get("solpha_rule", "atr");
-  if ($("ruleRow")) $("ruleRow").classList.toggle("hidden", active !== "SOLUSDT");
 }
 (function initSettings() {
   const share = (id, key, def) => {
@@ -721,7 +718,6 @@ function syncSettingsUI() {
   };
   share("inpAcct", "solpha_acct", "");
   share("inpRisk", "solpha_risk", "1");
-  if ($("selRule")) $("selRule").addEventListener("change", () => { store.set("solpha_rule", $("selRule").value); fullScan("manual", true); });
   for (const [id, key] of SETTING_CHECKS) {
     const el = $(id); if (!el) continue;
     el.addEventListener("change", () => { store.set(pkey(key), el.checked ? "1" : "0"); fullScan("manual", true); });
@@ -779,7 +775,7 @@ $("botNav").addEventListener("click", (e) => { const b = e.target.closest("butto
 renderPairList();
 showView(store.get("solpha_view", "signal"));
 
-// ---- Backtest: so bộ cũ ($0.55) với bộ mới (ATR + volume + Setup A/B) trên dữ liệu thật của Binance ----
+// ---- Backtest: đo từng bộ điều kiện (Long A/B, Short S1/S2/S3, điều chỉnh, Momentum) trên dữ liệu thật của Binance ----
 $("btnBacktest").addEventListener("click", async () => {
   const btn = $("btnBacktest"), out = $("btBox");
   const sym = active;
@@ -789,25 +785,24 @@ $("btnBacktest").addEventListener("click", async () => {
     const closed = (a) => a.slice(0, -1);
     const base = sigOptions(sym);
     const rows = [
-      ["Bộ cũ ($0.55) · 2 chiều", { ...base, rule: "fixed", sessionFilter: false }],
-      ["LONG A + B", { ...base, rule: "atr", only: "long" }],
-      ["LONG chỉ A", { ...base, rule: "atr", only: "long", setups: { A: true, B: false } }],
-      ["LONG chỉ B", { ...base, rule: "atr", only: "long", setups: { A: false, B: true } }],
-      ["LONG chặn cứng 1H BB", { ...base, rule: "atr", only: "long", allowBandWalk: false }],
-      ["SHORT S1 + S2 + S3 (tất cả)", { ...base, rule: "atr", only: "short", setups: { S1: true, S2: true, S3: true } }],
-      ["SHORT thuận xu hướng", { ...base, rule: "atr", only: "short", shortRegime: "trend" }],
-      ["SHORT điều chỉnh (1D còn tăng)", { ...base, rule: "atr", only: "short", shortRegime: "corrective", allowCorrective: true }],
+      ["LONG A + B", { ...base, only: "long" }],
+      ["LONG chỉ A", { ...base, only: "long", setups: { A: true, B: false } }],
+      ["LONG chỉ B", { ...base, only: "long", setups: { A: false, B: true } }],
+      ["LONG chặn cứng 1H BB", { ...base, only: "long", allowBandWalk: false }],
+      ["SHORT S1 + S2 + S3 (tất cả)", { ...base, only: "short", setups: { S1: true, S2: true, S3: true } }],
+      ["SHORT thuận xu hướng", { ...base, only: "short", shortRegime: "trend" }],
+      ["SHORT điều chỉnh (1D còn tăng)", { ...base, only: "short", shortRegime: "corrective", allowCorrective: true }],
       ["MOMENTUM 4H/1H · SHORT", { ...base, engine: "m4h", only: "short", allowMomentum4H: true }],
-      ["SHORT chỉ S1 (hồi bị từ chối)", { ...base, rule: "atr", only: "short", setups: { S1: true, S2: false, S3: false } }],
-      ["SHORT chỉ S2 (thủng đáy)", { ...base, rule: "atr", only: "short", setups: { S1: false, S2: true, S3: false } }],
-      ["SHORT chỉ S3 (1H BB trên thất bại)", { ...base, rule: "atr", only: "short", setups: { S1: false, S2: false, S3: true } }]
+      ["SHORT chỉ S1 (hồi bị từ chối)", { ...base, only: "short", setups: { S1: true, S2: false, S3: false } }],
+      ["SHORT chỉ S2 (thủng đáy)", { ...base, only: "short", setups: { S1: false, S2: true, S3: false } }],
+      ["SHORT chỉ S3 (1H BB trên thất bại)", { ...base, only: "short", setups: { S1: false, S2: false, S3: true } }]
     ].map(([name, o]) => [name, SolphaSignals.backtest(closed(c5), closed(h1), closed(h4), closed(d1), o, 5, closed(m15))]);
     const r0 = rows[0][1];
     const day = (t) => new Date(t).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
     out.innerHTML = `<div class="muted"><b>${baseOf(sym)}</b> · từ ${day(r0.from)} đến ${day(r0.to)} · vào ở giá đóng nến, chốt ở 1.5R; Long tối đa 4 giờ, Short tối đa 2 giờ. Nến chạm cả SL và TP tính là thua. Backtest Short bỏ qua bộ lọc funding (không có dữ liệu lịch sử).</div>
       <div class="table-wrap"><table><thead><tr><th>Bộ điều kiện</th><th>Số lệnh</th><th>Thắng</th><th>R TB/lệnh</th><th>Tổng R</th><th>Sụt tối đa</th></tr></thead><tbody>${rows.map(([n, r]) =>
         `<tr><td><b>${n}</b></td><td>${r.n}</td><td>${r.n ? Math.round(r.winRate * 100) + "%" : "—"}</td><td class="${r.avgR >= 0 ? "up" : "down"}">${r.n ? (r.avgR >= 0 ? "+" : "") + fmt(r.avgR) : "—"}</td><td class="${r.totalR >= 0 ? "up" : "down"}">${(r.totalR >= 0 ? "+" : "") + fmt(r.totalR, 1)}R</td><td>${fmt(r.maxDD, 1)}R</td></tr>`).join("")}</tbody></table></div>
-      ${[["LONG", rows[1][1]], ["SHORT", rows[5][1]], ["SHORT điều chỉnh", rows[7][1]], ["MOMENTUM 4H/1H SHORT", rows[8][1]]].map(([n, r]) => r.topWhy && r.topWhy.length ? `<div class="muted"><b>${n}</b> bị loại nhiều nhất vì: ${r.topWhy.slice(0, 3).map(([w, c]) => `${w.replace(/#/g, "x")} (${c})`).join(" · ")}</div>` : "").join("")}
+      ${[["LONG", "LONG A + B"], ["SHORT", "SHORT S1 + S2 + S3 (tất cả)"], ["SHORT điều chỉnh", "SHORT điều chỉnh (1D còn tăng)"], ["MOMENTUM 4H/1H SHORT", "MOMENTUM 4H/1H · SHORT"]].map(([n, k]) => [n, rows.find((x) => x[0] === k)[1]]).map(([n, r]) => r.topWhy && r.topWhy.length ? `<div class="muted"><b>${n}</b> bị loại nhiều nhất vì: ${r.topWhy.slice(0, 3).map(([w, c]) => `${w} (${c} nến)`).join(" · ")}</div>` : "").join("")}
       <div class="muted">Khoảng 5 ngày là mẫu nhỏ — chạy lại mỗi tuần và chỉ tin khi xu hướng lặp lại. Chưa tính phí giao dịch và trượt giá.</div>`;
   } catch (e) { out.textContent = "Lỗi backtest: " + (e.message || e); }
   btn.disabled = false;
@@ -878,7 +873,7 @@ $("btnOptimize") && $("btnOptimize").addEventListener("click", async () => {
   try {
     out.textContent = `Đang tải 30 ngày dữ liệu ${coin} (5M, 15M, 1H, 4H, 1D)…`;
     const [c5, m15, h1, h4, d1] = await Promise.all([loadHistory(sym, "5m", 5, 30, 120), loadHistory(sym, "15m", 15, 30, 120), loadHistory(sym, "1h", 60, 30, 300), loadHistory(sym, "4h", 240, 30, 200), loadHistory(sym, "1d", 1440, 30, 150)]);
-    const closed = (a) => a.slice(0, -1), base = { ...sigOptions(sym), rule: "atr", sessionFilter: true, allowBandWalk: true };
+    const closed = (a) => a.slice(0, -1), base = { ...sigOptions(sym), sessionFilter: true, allowBandWalk: true };
     const run = (o) => SolphaSignals.backtest(closed(c5), closed(h1), closed(h4), closed(d1), { ...base, ...o }, 5, closed(m15));
     const mid = c5[Math.floor(c5.length / 2)].t;
     const half = (r, first) => { const t = r.trades.filter((x) => (first ? x.t < mid : x.t >= mid)); return t.length ? t.reduce((s, x) => s + x.r, 0) / t.length : null; };
