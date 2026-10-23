@@ -401,11 +401,10 @@ function renderLogs() {
   const logs = JSON.parse(localStorage.getItem("solpha_logs") || "[]");
   $("logList").innerHTML = logs.length ? logs.slice(0, 60).map((l) => `<li>${l.alert ? "⚠ " : "• "}<b>${l.t}</b> — ${l.text}</li>`).join("") : "<li>Chưa có nhật ký.</li>";
 }
+const Q15 = 15 * 60 * 1000;
 function nextHourLabel() {
-  const d = new Date();
-  d.setMinutes(0, 0, 0);
-  d.setHours(d.getHours() + 1);
-  $("nextScan").textContent = "Quét giờ tới: " + d.toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" });
+  const d = new Date(Math.floor(Date.now() / Q15) * Q15 + Q15);
+  $("nextScan").textContent = "Quét kế tiếp (15′): " + d.toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" });
 }
 async function notify(title, body, tag = "solpha-alert") {
   if (!("Notification" in window)) return "Thiết bị không hỗ trợ thông báo";
@@ -446,7 +445,9 @@ async function scanPair(sym, reason, gapMin) {
   st.order = buildOrder(price, map, align, bands);
   persistPlan(sym, trig);
   const summary = fire ? `CẢNH BÁO ${align.dir} @ ${fp(price)} · ${bands.hits.map((h) => h.label).join(",")}` : `WAIT ${fp(price)} · 1D ${align.d1} / 4H ${align.h4} / 1H ${align.h1}`;
-  if (reason === "hourly" || reason === "boot") addLog(`[${coin}] ${summary}`, fire);
+  // Ghi nhật ký pha mỗi 15 phút: lần quét đầu tiên của mỗi mốc :00/:15/:30/:45 (dù do WebSocket, đồng hồ 5′ hay 15′ kích hoạt).
+  const q = Math.floor(Date.now() / Q15);
+  if (reason === "boot" || q !== st.loggedQ) { st.loggedQ = q; addLog(`[${coin}] ${summary}`, fire); }
   if (fire) {
     const key = `${align.dir}-${bands.hits.map((h) => h.key + h.band).join("")}-${Math.round(Math.log(price) / 0.005)}`; // đổi sau mỗi ~0.5% giá
     const lk = pkey("solpha_last_alert", sym);
@@ -665,16 +666,11 @@ async function setWake(on) {
     } else if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
   } catch (_) { wakeLock = null; }
 }
-function scheduleHourly() {
-  clearInterval(hourTimer);
-  const msToNextHour = () => {
-    const n = new Date();
-    return (60 - n.getMinutes()) * 60 * 1000 - n.getSeconds() * 1000 - n.getMilliseconds();
-  };
-  setTimeout(function tick() {
-    fullScan("hourly");
-    hourTimer = setInterval(() => fullScan("hourly"), 60 * 60 * 1000);
-  }, Math.max(msToNextHour(), 5000));
+// Quét tổng mỗi 15 phút (ngay sau khi nến 15M đóng): cập nhật pha 1D/4H/1H/15M của mọi cặp và ghi nhật ký.
+function scheduleQuarter() {
+  clearTimeout(hourTimer);
+  const ms = Q15 - (Date.now() % Q15) + 10000;
+  hourTimer = setTimeout(() => { if (Date.now() - lastScanAt > 60000) fullScan("q15"); scheduleQuarter(); }, ms);
 }
 function schedulePrice() {
   clearInterval(priceTimer);
@@ -695,7 +691,7 @@ window.addEventListener("appinstalled", () => { deferredPrompt = null; $("btnIns
 $("btnNotify").addEventListener("click", async () => {
   if (!("Notification" in window)) { $("btnNotify").textContent = "Thiết bị không hỗ trợ"; return; }
   const perm = await Notification.requestPermission();
-  if (perm === "granted") notify("SOLPHA", "Cảnh báo đã bật. Giữ app mở để quét theo giờ.");
+  if (perm === "granted") notify("SOLPHA", "Cảnh báo đã bật. Giữ app mở để quét mỗi 15 phút và realtime.");
   $("btnNotify").textContent = perm === "granted" ? "Cảnh báo đã bật" : "Trình duyệt chặn thông báo";
 });
 $("btnRefresh").addEventListener("click", () => fullScan("manual"));
@@ -703,7 +699,7 @@ $("selPrice").value = store.get("solpha_price_sec", "10");
 $("selPrice").addEventListener("change", () => { store.set("solpha_price_sec", $("selPrice").value); schedulePrice(); });
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js", { scope: "./" }).catch(() => {});
 if ("Notification" in window && Notification.permission === "granted") $("btnNotify").textContent = "Cảnh báo đã bật";
-renderLogs(); schedulePrice(); scheduleHourly(); renderTabs(); refreshTickers(true); fullScan("boot"); wsConnect();
+renderLogs(); schedulePrice(); scheduleQuarter(); renderTabs(); refreshTickers(true); fullScan("boot"); wsConnect();
 // Quét ngay sau mỗi mốc 5 phút (+8s) để bắt từng nến 5M vừa đóng.
 (function scheduleWatch() {
   const ms = 5 * 60 * 1000 - (Date.now() % (5 * 60 * 1000)) + 8000;

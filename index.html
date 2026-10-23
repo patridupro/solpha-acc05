@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0b0d12" />
+  <meta name="theme-color" content="#189848" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" />
   <meta name="description" content="SOLPHA — theo dõi nhiều cặp futures (SOL, BTC, ETH…) đa khung, đồng pha + Bollinger, cảnh báo tín hiệu." />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -23,7 +26,7 @@
       <img class="logo" src="icon.svg" alt="SOLPHA" width="40" height="40" />
       <div>
         <h1>SOLPHA</h1>
-        <p>Futures Desk · đa cặp · MTF · BB</p>
+        <p>Futures Desk · đa cặp</p>
       </div>
     </div>
     <div class="top-actions">
@@ -31,6 +34,7 @@
       <button id="btnNotify" class="btn ghost">Bật cảnh báo</button>
       <button id="btnRefresh" class="btn primary">Quét ngay</button>
     </div>
+    <img class="etek-logo" src="icons/etek-logo.png" alt="ETEK Power" width="139" height="30" />
   </header>
   <nav class="pairbar" id="pairBar" aria-label="Cặp giao dịch"></nav>
   <section class="addpanel hidden" id="addPanel">
@@ -74,7 +78,7 @@
         <h2>Ưu tiên</h2>
         <p id="biasText" class="big">WAIT</p>
         <div id="planBox" class="plan"></div>
-        <p id="nextScan" class="muted">Quét giờ tới: —</p>
+        <p id="nextScan" class="muted">Quét kế tiếp (15′): —</p>
       </article>
     </section>
     <section class="card" id="trigCard">
@@ -121,7 +125,7 @@
       <section class="two one">
       <article class="card">
         <div class="section-head">
-          <h2>Nhật ký theo giờ</h2>
+          <h2>Nhật ký 15 phút</h2>
           <span class="muted">Mọi cặp · quét mỗi 60 phút</span>
         </div>
         <ul id="logList" class="log"></ul>

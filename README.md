@@ -1,4 +1,4 @@
-# SOLPHA — Futures Desk (SOL · BTC · ETH · thêm cặp tuỳ ý)
+# SOLPHA — Futures Desk · ETEK Power (SOL · BTC · ETH · thêm cặp tuỳ ý)
 
 PWA theo dõi futures USDT-M đa khung (5M, 15M, 1H, 4H, 1D), RSI / EMA / Bollinger, cảnh báo khi **đồng pha + chạm band**.
 
@@ -61,7 +61,7 @@ Xem [`docs/PWA-DEPLOY-GUIDE.md`](docs/PWA-DEPLOY-GUIDE.md) (bản PDF: `docs/PWA
 1. Mở link `https://<site>.netlify.app` bằng Chrome.
 2. Bấm nút **Cài app** trong app, hoặc menu ⋮ → **Thêm vào màn hình chính / Cài đặt ứng dụng**.
 3. Mở app từ icon SOLPHA → bấm **Bật cảnh báo** → cho phép thông báo.
-4. Giữ app mở (chạy nền) để quét mỗi 5 phút và mỗi giờ.
+4. Giữ app mở để nhận giá realtime, quét tín hiệu mỗi khi nến 5M đóng và quét tổng (ghi nhật ký pha) mỗi 15 phút.
 
 ## Checklist PWA đã đạt
 - Manifest có `id`, `start_url`, `scope`, icon PNG 192/512 + maskable (bắt buộc cho WebAPK trên Android).
