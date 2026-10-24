@@ -104,6 +104,7 @@ function fmt(n, d = 2) {
   return Number(n).toFixed(d);
 }
 function fp(n) { return fmt(n, curDec); }
+const hmVN = (t) => new Date(t).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" });
 function nowVN() {
   return new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
 }
@@ -234,13 +235,14 @@ function candleTrigger(map, align, funding, sym) {
   rows.push({ key: "m4h", label: "4H/1H·5M+15M", ...SolphaSignals.evaluateMomentum(P["5m"], map["5m"].candles.length - 2, m15, htf, 5, opt) });
   return rows;
 }
-function renderTrigger(trig) {
-  const hit = trig.find((x) => x.side);
+function renderTrigger(trig, sym = active) {
+  const hit = trig.find((x) => x.side), held = hit ? null : savedPlan(sym);
   $("trigCard").className = "card " + (hit ? (hit.side === "long" ? "trig-long" : "trig-short") : "");
   $("trigText").textContent = hit && hit.engine === "m4h" ? `${hit.side.toUpperCase()} MOMENTUM 4H/1H · 5M+15M chạm ${hit.side === "long" ? "BB trên" : "BB dưới"} (½ khối lượng)`
-    : hit ? `${hit.side.toUpperCase()}${hit.corrective ? " ĐIỀU CHỈNH" : ""} · Setup ${hit.setup} · ${hit.label}${hit.momentum ? " · Momentum (½ khối lượng)" : ""}` : "Chưa có nến tín hiệu";
+    : hit ? `${hit.side.toUpperCase()}${hit.corrective ? " ĐIỀU CHỈNH" : ""} · Setup ${hit.setup} · ${hit.label}${hit.momentum ? " · Momentum (½ khối lượng)" : ""}` : "Chưa có nến tín hiệu mới";
   // Lý do hiển thị ngay dưới tiêu đề (trên điện thoại cột Ghi chú nằm khuất bên phải bảng).
-  $("trigWhy").innerHTML = hit ? "" : trig.map((x) => `<div><b>${x.label}</b>: ${x.why.join(" · ") || "—"}</div>`).join("");
+  const heldTxt = held ? `<div class="held ${held.x.side}">Đang giữ kế hoạch <b>${held.x.side.toUpperCase()} ${held.x.engine === "m4h" ? "M4H" : held.x.setup}</b> từ nến ${held.x.label} lúc ${hmVN(held.x.t)} — xem ô hành động phía trên.</div>` : "";
+  $("trigWhy").innerHTML = hit ? "" : heldTxt + trig.map((x) => `<div><b>${x.label}</b>: ${x.why.join(" · ") || "—"}</div>`).join("");
   $("trigBody").innerHTML = trig.map((x) => {
     const time = new Date(x.t).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" });
     const sig = x.side ? `<span class="tag ${x.side === "long" ? "tang" : "giam"}">${x.side.toUpperCase()}${x.corrective ? " ĐC" : ""} ${x.setup}${x.momentum ? " ·M" : ""}</span>` : '<span class="tag in">—</span>';
@@ -266,12 +268,49 @@ function planText(x, sym) {
     ]
   };
 }
-function persistPlan(sym, trig) {
-  const hit = trig.find((x) => x.side && x.key === "5m") || trig.find((x) => x.side && x.key === "15m") || trig.find((x) => x.side);
-  if (hit) store.set(pkey("solpha_last_plan", sym), JSON.stringify({ x: hit, exp: Date.now() + 30 * 60000 }));
+const TF_MIN = { "5m": 5, "15m": 15, m4h: 5 };
+const planClose = (x) => x.t + (TF_MIN[x.key] || 5) * 60000; // lúc nến tín hiệu đóng
+function rawPlan(sym) { try { return JSON.parse(pget("solpha_last_plan", "null", sym)); } catch (_) { return null; } }
+// Kế hoạch hiệu lực 30 phút tính từ lúc nến tín hiệu ĐÓNG. Chỉ thay bằng tín hiệu mới hơn — không gia hạn lại cùng một nến.
+function persistPlan(sym, cands) {
+  const hits = cands.filter((x) => x && x.side && x.plan);
+  if (!hits.length) return;
+  const best = hits.sort((a, b) => planClose(b) - planClose(a) || (a.key === "5m" ? -1 : b.key === "5m" ? 1 : 0))[0];
+  const cur = rawPlan(sym);
+  if (cur && cur.x && planClose(cur.x) >= planClose(best)) return;
+  store.set(pkey("solpha_last_plan", sym), JSON.stringify({ x: best, exp: planClose(best) + 30 * 60000 }));
 }
+// Theo dõi giá sau khi nến tín hiệu đóng: chạm SL / TP1 / TP2 / về hoà vốn. Nến chạm cả SL và TP1 tính là SL (như backtest).
+function planStatus(sym, s) {
+  const st = stOf(sym), c = st.map && st.map["5m"] ? st.map["5m"].candles : [];
+  const from = planClose(s.x), p = s.x.plan, short = s.x.side === "short";
+  let tp1At = null;
+  for (const k of c) {
+    if (k.t < from) continue;
+    if (!tp1At) {
+      if (short ? k.h >= p.sl : k.l <= p.sl) return { code: "sl", t: k.t };
+      if (short ? k.l <= p.tp1 : k.h >= p.tp1) tp1At = k.t;
+    } else {
+      if (short ? k.l <= p.tp2 : k.h >= p.tp2) return { code: "tp2", t: k.t };
+      if (short ? k.h >= p.entry : k.l <= p.entry) return { code: "be", t: k.t };
+    }
+  }
+  return tp1At ? { code: "tp1", t: tp1At } : { code: "open" };
+}
+// Kế hoạch còn hiệu lực: chưa chạm SL và còn trong 30′, hoặc đã chạm TP1 và đang giữ phần còn lại tới TP2 (trong giới hạn thời gian).
 function savedPlan(sym) {
-  try { const s = JSON.parse(pget("solpha_last_plan", "null", sym)); return s && s.exp > Date.now() ? s : null; } catch (_) { return null; }
+  const s = rawPlan(sym); if (!s || !s.x) return null;
+  s.status = planStatus(sym, s);
+  const hold = (s.x.plan.timeStopBars || 48) * 5 * 60000;
+  if (s.status.code === "open" && s.exp > Date.now()) return s;
+  if (s.status.code === "tp1" && Date.now() < planClose(s.x) + hold) return s;
+  return null;
+}
+// Kết quả của kế hoạch gần nhất (trong 3 giờ) để hiện khi đang CHỜ.
+function lastOutcome(sym) {
+  const s = rawPlan(sym); if (!s || !s.x || Date.now() - planClose(s.x) > 3 * 3600000) return null;
+  if (savedPlan(sym)) return null; // còn hiệu lực → đang hiện ở ô hành động
+  return { s, st: planStatus(sym, s) };
 }
 function renderPlan(sym) {
   const saved = savedPlan(sym), card = $("planCard");
@@ -514,29 +553,35 @@ function renderAction(sym) {
   const st = stOf(sym), box = $("actBox"); if (!box) return;
   if (!st.map) { box.className = "act wait"; box.innerHTML = `<div class="act-h"><span class="act-side">${st.error ? "Lỗi tải dữ liệu" : "Đang quét…"}</span></div>`; return; }
   const live = st.trig && (st.trig.find((x) => x.side && x.key === "5m") || st.trig.find((x) => x.side && x.key === "15m") || st.trig.find((x) => x.side));
-  const saved = live ? null : savedPlan(sym), x = live || (saved && saved.x);
-  const hm = (t) => new Date(t).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" });
+  const saved = live ? null : savedPlan(sym), x = live || (saved && saved.x), hm = hmVN;
   if (x) {
     const p = x.plan, coin = baseOf(sym), half = (p.sizeFactor || 1) < 1;
     const acct = Number(store.get("solpha_acct", "0")), riskPct = Number(store.get("solpha_risk", "1")) * (p.sizeFactor || 1);
     const riskUsd = acct * riskPct / 100, qty = riskUsd && p.risk ? riskUsd / p.risk : 0;
     const sub = x.engine === "m4h" ? "Momentum 4H/1H" : `Setup ${x.setup}${x.corrective ? " · điều chỉnh" : ""} · nến ${x.label}`;
-    box.className = "act " + x.side;
-    box.innerHTML = `<div class="act-h"><span class="act-side">${x.side === "long" ? "▲ LONG" : "▼ SHORT"}</span><span class="act-sub">${sub}${half ? " · ½ khối lượng" : ""}</span></div>
+    // MỚI = nến tín hiệu vừa đóng; ĐANG GIỮ = kế hoạch từ tín hiệu trước đó, còn hiệu lực.
+    const ago = Math.round((Date.now() - planClose(x)) / 60000);
+    const tag = !saved ? `<div class="act-tag new">MỚI · nến ${x.label} ${hm(x.t)} vừa đóng</div>`
+      : saved.status.code === "tp1" ? `<div class="act-tag tp">ĐÃ CHẠM TP1 lúc ${hm(saved.status.t)} ✓ · dời SL về giá vào, giữ phần còn lại tới TP2</div>`
+      : `<div class="act-tag hold">ĐANG GIỮ · tín hiệu nến ${x.label} ${hm(x.t)} (đóng ${ago}′ trước) · còn hiệu lực ${Math.max(0, Math.ceil((saved.exp - Date.now()) / 60000))}′</div>`;
+    box.className = "act " + x.side + (saved ? " hold" : "");
+    box.innerHTML = `${tag}<div class="act-h"><span class="act-side">${x.side === "long" ? "▲ LONG" : "▼ SHORT"}</span><span class="act-sub">${sub}${half ? " · ½ khối lượng" : ""}</span></div>
       <div class="act-grid">
         <div><span>Vào 3 phần</span><b>${fp(p.entries[0])}</b><small>${fp(p.entries[1])} / ${fp(p.entries[2])}</small></div>
-        <div><span>Stop loss</span><b class="down">${fp(p.sl)}</b><small>rủi ro ${fp(p.risk)}</small></div>
+        ${saved && saved.status.code === "tp1" ? `<div><span>Stop loss (đã dời)</span><b>${fp(p.entry)}</b><small>hoà vốn · SL gốc ${fp(p.sl)}</small></div>` : `<div><span>Stop loss</span><b class="down">${fp(p.sl)}</b><small>rủi ro ${fp(p.risk)}</small></div>`}
         <div><span>TP1 · 1:${fmt(p.rr1, 1)}</span><b class="up">${fp(p.tp1)}</b><small>chốt ½, dời SL</small></div>
         <div><span>TP2 · 1:${fmt(p.rr2, 1)}</span><b class="up">${fp(p.tp2)}</b><small>${p.timeStopBars ? "thoát sau " + Math.round(p.timeStopBars * 5 / 6) / 10 + "h nếu chưa TP1" : "&nbsp;"}</small></div>
       </div>
-      <div class="act-foot">${qty ? `Khối lượng <b>${fmtQty(qty)} ${coin}</b> ≈ $${fmt(qty * p.entry, 0)} · rủi ro $${fmt(riskUsd, 0)}` : "Nhập vốn ở Cài đặt để tính khối lượng"} · nến ${hm(x.t)}${saved ? ` · còn hiệu lực ${Math.ceil((saved.exp - Date.now()) / 60000)}′` : ""}</div>`;
+      <div class="act-foot">${qty ? `Khối lượng <b>${fmtQty(qty)} ${coin}</b> ≈ $${fmt(qty * p.entry, 0)} · rủi ro $${fmt(riskUsd, 0)}` : "Nhập vốn ở Cài đặt để tính khối lượng"}</div>`;
     return;
   }
   const a = st.align, up = a.d1 === "tang" && a.h4 === "tang" && a.h1 === "tang", dn = a.d1 === "giam" && a.h4 === "giam" && a.h1 === "giam";
   const lean = up ? "Thiên LONG · chờ nến 5M đủ chuẩn" : dn ? "Thiên SHORT · chờ nến 5M đủ chuẩn" : a.h4 === "giam" && a.h1 === "giam" ? "4H/1H giảm · chờ 5M+15M chạm BB dưới (Momentum)" : "Khung lớn chưa đồng pha · đứng ngoài";
   const miss = (st.trig || []).filter((t) => t.why && t.why[0]).slice(0, 3).map((t) => `<div><b>${t.label}</b> ${t.why[0]}</div>`).join("");
   box.className = "act " + (st.fire ? "warn" : "wait");
-  box.innerHTML = `<div class="act-h"><span class="act-side">${st.fire ? "CHÚ Ý" : "CHỜ"}</span><span class="act-sub">${lean}</span></div>${miss ? `<div class="act-miss">${miss}</div>` : ""}`;
+  const out = lastOutcome(sym), OUT = { sl: "chạm SL ✗", tp2: "chạm TP2 ✓✓", be: "chạm TP1 rồi về hoà vốn ✓", open: "hết 30′ hiệu lực", tp1: "chạm TP1 ✓, hết giờ giữ phần còn lại" };
+  const outTxt = out ? `<div class="act-out">Kế hoạch gần nhất: ${out.s.x.side.toUpperCase()} ${out.s.x.engine === "m4h" ? "M4H" : out.s.x.setup} nến ${hmVN(out.s.x.t)} → <b>${OUT[out.st.code]}</b>${out.st.t ? " lúc " + hmVN(out.st.t) : ""}</div>` : "";
+  box.innerHTML = `<div class="act-h"><span class="act-side">${st.fire ? "CHÚ Ý" : "CHỜ"}</span><span class="act-sub">${lean}</span></div>${miss ? `<div class="act-miss">${miss}</div>` : ""}${outTxt}`;
 }
 // ---- Dải xu hướng 5 khung: hướng (mũi tên + màu), RSI và vị trí BB ----
 function renderTrend(st) {
@@ -563,7 +608,7 @@ function renderPair(sym) {
   if (st.ticker) renderTicker(st.ticker);
   renderTable(st.map);
   setStatus(st.align, st.bands);
-  renderTrigger(st.trig);
+  renderTrigger(st.trig, sym);
   renderRV(st);
   renderAction(sym);
   renderTrend(st);
@@ -721,6 +766,8 @@ async function catchUp(sym, map, gapMin) {
     if (r.mom.side && !fundingBlocks) items.push({ key: `${pre}m4h-${r.t}-short`, t: r.t, sig: r.mom, tag: "M4H" });
   }
   items.sort((a, b) => b.t - a.t);
+  // Tín hiệu tìm được khi quét bù cũng thành kế hoạch nếu mới hơn kế hoạch đang giữ.
+  persistPlan(sym, items.map((it) => ({ ...it.sig, key: it.tag === "M4H" ? "m4h" : "5m", label: it.tag === "M4H" ? "4H/1H·5M+15M" : "5M" })));
   const hm = (t) => new Date(t).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" });
   const missed = items.filter((x) => !seenKeys.has(x.key));
   const sleep = gapMin >= 8 ? `<div class="muted">App vừa thức dậy sau ${Math.round(gapMin)} phút "ngủ" — đã quét bù các nến trong lúc đó.</div>` : "";
