@@ -11,7 +11,7 @@ https://solpha.pages.dev — Cloudflare Pages build từ nhánh `claude/intellig
 - Thanh tab trên cùng: **SOL, BTC, ETH, DOGE** (mỗi tab hiện giá, %24h và nhãn LONG / SHORT / CHÚ Ý / CHỜ). Nút **＋** thêm bất kỳ cặp USDT nào có trên Binance Futures (tối đa 8), bấm ✕ để xoá.
 - Cùng bộ máy tín hiệu (ATR/BB/EMA/volume, Long A/B, Short S1/S2/S3, điều chỉnh, Momentum 4H/1H) cho mọi cặp; app **quét tất cả cặp mỗi 5 phút** và báo thông báo kèm tên coin (cặp đang xem quét trước).
 - Cài đặt điều kiện, kế hoạch lệnh, Backtest, Tối ưu 30 ngày, Soi lại đều **riêng từng cặp** (SOL giữ nguyên cài đặt cũ). Vốn và % rủi ro dùng chung. Chạy Tối ưu 30 ngày cho từng cặp trước khi tin.
-- **Realtime**: WebSocket Binance Futures (`fstream.binance.com`) đẩy giá/nến 5 khung ~0.25 giây, mark + funding mỗi giây; chỉ báo của cặp đang xem tính lại mỗi 2 giây, nến 5M đóng là quét tín hiệu ngay. Rớt WebSocket → tự quay về hỏi giá định kỳ (REST) và tự nối lại. Số lẻ theo bước giá của sàn (BTC 1, ETH/SOL 2, DOGE 5).
+- **Realtime**: WebSocket Binance Futures (`wss://fstream.binance.com/market/…` — địa chỉ mới bắt buộc từ 23/04/2026) đẩy giá/nến 5 khung ~0.25 giây, mark + funding mỗi giây; chỉ báo của cặp đang xem tính lại mỗi 2 giây, nến 5M đóng là quét tín hiệu ngay. Rớt WebSocket → tự quay về hỏi giá định kỳ (REST) và tự nối lại. Số lẻ theo bước giá của sàn (BTC 1, ETH/SOL 2, DOGE 5).
 - Thanh điều hướng dưới: Tín hiệu · Phân tích · Công cụ · Nhật ký · Cài đặt.
 
 ## Tối ưu 30 ngày

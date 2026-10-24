@@ -482,6 +482,33 @@ async function liveRefresh() {
   } catch (_) {}
   st.live = false;
 }
+// ---- Range / Volume nến 5M, 15M (vừa đóng) và nến 5M đang chạy — đặt ngay dưới giá ----
+// Ngưỡng theo hướng nến: Long range ≥ 1.3×ATR & volume ≥ 1.5×; Short range ≥ 1.2×ATR & volume ≥ 1.3×; range > 3×ATR là nến tin/thanh lý.
+function rvNeed(pos) {
+  const D = SolphaSignals.DEFAULTS, short = pos != null && pos <= D.closeZone;
+  return { r: short ? D.sMinATR : D.atrMin, v: short ? D.sVol : D.volMult, rMax: D.atrMax, side: pos == null ? null : pos >= 1 - D.closeZone ? "long" : short ? "short" : null };
+}
+function liveCandle(st) {
+  const c = st.map && st.map["5m"] && st.map["5m"].candles; if (!c || c.length < 30) return null;
+  const k = c[c.length - 1], P = SolphaSignals.prepare(c.slice(-60)), n = P.candles.length - 1, atr = P.atr[n - 1];
+  const vols = P.vol.slice(n - 20, n), avg = vols.reduce((a, b) => a + b, 0) / vols.length, range = k.h - k.l;
+  return { t: k.t, range, atrMult: atr ? range / atr : 0, volMult: avg ? k.v / avg : 0, pos: range > 0 ? (k.c - k.l) / range : 0.5 };
+}
+function rvMeter(val, need, max) {
+  const ok = val >= need && (!max || val <= max), near = !ok && val >= need * 0.7, over = max && val > max;
+  return `<span class="rvv ${ok ? "ok" : over ? "over" : near ? "near" : ""}">${fmt(val, 1)}×</span><span class="rvbar"><i style="width:${Math.min(100, (val / (need * 2)) * 100)}%"></i><b></b></span><span class="rvneed">cần ${need}${max ? "–" + max : ""}</span>`;
+}
+function renderRV(st) {
+  const box = $("rvBox"); if (!box) return;
+  if (!st.trig) { box.innerHTML = ""; return; }
+  const rows = [["5M", st.trig.find((x) => x.key === "5m"), "vừa đóng"], ["15M", st.trig.find((x) => x.key === "15m"), "vừa đóng"]];
+  const lv = liveCandle(st);
+  if (lv) { const left = Math.max(0, lv.t + 300000 - Date.now()); rows.push(["5M", lv, `đang chạy · còn ${Math.floor(left / 60000)}′${String(Math.floor(left / 1000) % 60).padStart(2, "0")}″`]); }
+  box.innerHTML = `<div class="rvh"><span></span><span>Range (×ATR)</span><span>Volume (×TB20)</span><span>Đóng</span></div>` + rows.filter((r) => r[1] && r[1].atrMult != null).map(([lb, x, note]) => {
+    const nd = rvNeed(x.pos), dir = nd.side === "long" ? "▲" : nd.side === "short" ? "▼" : "–";
+    return `<div class="rvr ${note.startsWith("đang") ? "live" : ""}"><span class="rvl"><b>${lb}</b><small>${note}</small></span><span class="rvc">${rvMeter(x.atrMult, nd.r, nd.rMax)}</span><span class="rvc">${rvMeter(x.volMult, nd.v)}</span><span class="rvp ${nd.side || ""}">${Math.round(x.pos * 100)}% ${dir}</span></div>`;
+  }).join("");
+}
 // Vẽ một cặp lên màn hình từ dữ liệu đã quét.
 function renderPair(sym) {
   const st = stOf(sym), coin = baseOf(sym);
@@ -498,6 +525,7 @@ function renderPair(sym) {
   renderTable(st.map);
   setStatus(st.align, st.bands);
   renderTrigger(st.trig);
+  renderRV(st);
   if (!renderPlan(sym) && !st.fire) $("biasText").textContent = "WAIT";
   $("orderBox").textContent = (st.error ? "⚠ Lần quét gần nhất lỗi: " + st.error + "\n(đang hiện dữ liệu lần trước)\n\n" : "") + st.order;
   renderUpdated(st);
@@ -518,7 +546,7 @@ function badgeFor(sym) {
 function renderTabs() {
   const bar = $("pairBar"), sig = pairs.join(",") + "|" + active;
   if (bar.dataset.sig !== sig) {
-    bar.innerHTML = pairs.map((b) => `<button class="ptab ${symOf(b) === active ? "active" : ""}" data-sym="${symOf(b)}"><span class="pname">${b}</span><span class="pprice">…</span><span class="pchg"></span><span class="pbadge wait">…</span></button>`).join("")
+    bar.innerHTML = pairs.map((b) => `<button class="ptab ${symOf(b) === active ? "active" : ""}" data-sym="${symOf(b)}"><span class="pname">${b}</span><span class="pprice">…</span><span class="pchg"></span><span class="pbadge wait">…</span><span class="pmeta"></span></button>`).join("")
       + `<button class="ptab add" id="btnAddPair" aria-label="Thêm / quản lý cặp">＋</button>`;
     bar.dataset.sig = sig;
   }
@@ -530,6 +558,12 @@ function renderTabs() {
       const c = el.querySelector(".pchg"); c.className = "pchg " + (t.chg >= 0 ? "up" : "down"); c.textContent = (t.chg >= 0 ? "+" : "") + t.chg.toFixed(2) + "%";
     }
     const g = el.querySelector(".pbadge"); g.className = "pbadge " + bd.cls; g.textContent = bd.txt;
+    // Range / volume nến 5M vừa đóng của từng cặp: xanh khi đạt ngưỡng.
+    const x5 = st.trig && st.trig.find((x) => x.key === "5m"), pm = el.querySelector(".pmeta");
+    if (x5 && x5.atrMult != null) {
+      const nd = rvNeed(x5.pos), rOk = x5.atrMult >= nd.r && x5.atrMult <= nd.rMax, vOk = x5.volMult >= nd.v;
+      pm.innerHTML = `5M <span class="${rOk ? "ok" : ""}">R ${fmt(x5.atrMult, 1)}</span> · <span class="${vOk ? "ok" : ""}">V ${fmt(x5.volMult, 1)}</span>`;
+    }
   }
 }
 async function refreshTickers(force) {
@@ -547,19 +581,27 @@ async function refreshTickers(force) {
 }
 // ---- Realtime: WebSocket Binance Futures (giá, mark, funding, nến 5 khung đẩy về liên tục ~0.25 giây) ----
 // Hỏng WebSocket thì tự quay về hỏi giá định kỳ (REST) như cũ và tự kết nối lại.
-const WS_HOST = "wss://fstream.binance.com/stream?streams=";
-let ws = null, wsRetry = 0, wsLast = 0, wsReconnect = null, scanSoon = null;
+// Từ 23/04/2026 Binance tách WebSocket Futures thành /public, /market, /private: nến, ticker, mark price nằm ở /market.
+// Địa chỉ cũ (không có /market) im lặng không đẩy các luồng này nữa → nếu 12 giây không có dữ liệu thì đổi sang địa chỉ dự phòng.
+const WS_HOSTS = ["wss://fstream.binance.com/market/stream?streams=", "wss://fstream.binance.com/stream?streams="];
+let ws = null, wsRetry = 0, wsLast = 0, wsReconnect = null, scanSoon = null, wsHost = 0, wsWatch = null, wsInfo = "chưa kết nối";
 const wsOk = () => ws && ws.readyState === 1 && Date.now() - wsLast < 15000;
 function wsConnect() {
   clearTimeout(wsReconnect);
   if (ws) { ws.onclose = null; try { ws.close(); } catch (_) {} ws = null; }
   if (!("WebSocket" in window) || !pairs.length) return;
   const streams = pairs.flatMap((b) => { const s = symOf(b).toLowerCase(); return [`${s}@ticker`, `${s}@markPrice@1s`, ...TFS.map((tf) => `${s}@kline_${tf.binance}`)]; });
-  try { ws = new WebSocket(WS_HOST + streams.join("/")); } catch (_) { return wsRetryLater(); }
-  ws.onopen = () => { wsRetry = 0; };
-  ws.onmessage = (e) => { wsLast = Date.now(); try { onStream(JSON.parse(e.data).data); } catch (_) {} };
+  const host = WS_HOSTS[wsHost % WS_HOSTS.length];
+  try { ws = new WebSocket(host + streams.join("/")); } catch (_) { return wsRetryLater(); }
+  const me = ws;
+  ws.onopen = () => {
+    wsInfo = "đã mở " + host.split("?")[0] + ", chờ dữ liệu…";
+    clearTimeout(wsWatch);
+    wsWatch = setTimeout(() => { if (ws === me && Date.now() - wsLast > 12000) { wsHost++; wsInfo = "không có dữ liệu ở " + host.split("?")[0] + ", đổi địa chỉ"; try { me.close(); } catch (_) {} } }, 12000);
+  };
+  ws.onmessage = (e) => { wsLast = Date.now(); wsRetry = 0; wsInfo = "realtime qua " + host.split("?")[0]; try { onStream(JSON.parse(e.data).data); } catch (_) {} };
   ws.onerror = () => { try { ws.close(); } catch (_) {} };
-  ws.onclose = () => { ws = null; wsRetryLater(); };
+  ws.onclose = () => { if (ws === me) { ws = null; wsRetryLater(); } };
 }
 function wsRetryLater() {
   clearTimeout(wsReconnect);
@@ -603,6 +645,7 @@ setInterval(() => {
     renderPair(active);
   } else if (any && st.ticker) renderTicker(st.ticker);
   if (any) renderTabs();
+  if (st.map) renderRV(st);
   $("livePill").textContent = scanning ? "SCAN" : wsOk() ? "⚡ REALTIME" : "LIVE";
 }, 1000);
 async function fullScan(reason = "manual", onlyActive = false) {
@@ -945,7 +988,7 @@ $("btnTestNotify") && $("btnTestNotify").addEventListener("click", async () => {
   const sw = "serviceWorker" in navigator ? ((await navigator.serviceWorker.getRegistration()) ? "đã đăng ký" : "CHƯA đăng ký") : "không hỗ trợ";
   const res = await notify("SOLPHA — thông báo thử", "Nếu anh thấy dòng này trên khay thông báo và máy rung thì cảnh báo hoạt động.", "solpha-test");
   const standalone = window.matchMedia("(display-mode: standalone)").matches ? "đang chạy như app đã cài" : "đang chạy trong trình duyệt (chưa mở từ icon)";
-  out.innerHTML = `Quyền: <b>${perm}</b> · Service worker: <b>${sw}</b> · Kết quả gửi: <b>${res}</b> · ${standalone}.<br>` +
+  out.innerHTML = `Realtime: <b>${wsOk() ? "⚡ " : ""}${wsInfo}</b><br>Quyền: <b>${perm}</b> · Service worker: <b>${sw}</b> · Kết quả gửi: <b>${res}</b> · ${standalone}.<br>` +
     (perm === "granted" && res === "ok" ? "App đã gửi. <b>Không thấy thông báo / không rung</b> → lỗi nằm ở Android: Cài đặt → Ứng dụng → SOLPHA (hoặc Chrome) → Thông báo: bật, cho phép rung/âm thanh, mức độ ưu tiên cao; tắt Không làm phiền / chế độ im lặng; Pin → không hạn chế." :
      perm === "denied" ? "Thông báo đang bị chặn: Chrome → Cài đặt trang web → Thông báo → cho phép solpha.pages.dev." : "Bấm lại sau khi cho phép thông báo.");
 });
