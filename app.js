@@ -509,12 +509,51 @@ function renderRV(st) {
     return `<div class="rvr ${note.startsWith("đang") ? "live" : ""}"><span class="rvl"><b>${lb}</b><small>${note}</small></span><span class="rvc">${rvMeter(x.atrMult, nd.r, nd.rMax)}</span><span class="rvc">${rvMeter(x.volMult, nd.v)}</span><span class="rvp ${nd.side || ""}">${Math.round(x.pos * 100)}% ${dir}</span></div>`;
   }).join("");
 }
+// ---- Ô HÀNH ĐỘNG: có tín hiệu → LONG/SHORT + giá vào, SL, TP, khối lượng; chưa có → CHỜ + đang thiếu gì ----
+function renderAction(sym) {
+  const st = stOf(sym), box = $("actBox"); if (!box) return;
+  if (!st.map) { box.className = "act wait"; box.innerHTML = `<div class="act-h"><span class="act-side">${st.error ? "Lỗi tải dữ liệu" : "Đang quét…"}</span></div>`; return; }
+  const live = st.trig && (st.trig.find((x) => x.side && x.key === "5m") || st.trig.find((x) => x.side && x.key === "15m") || st.trig.find((x) => x.side));
+  const saved = live ? null : savedPlan(sym), x = live || (saved && saved.x);
+  const hm = (t) => new Date(t).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" });
+  if (x) {
+    const p = x.plan, coin = baseOf(sym), half = (p.sizeFactor || 1) < 1;
+    const acct = Number(store.get("solpha_acct", "0")), riskPct = Number(store.get("solpha_risk", "1")) * (p.sizeFactor || 1);
+    const riskUsd = acct * riskPct / 100, qty = riskUsd && p.risk ? riskUsd / p.risk : 0;
+    const sub = x.engine === "m4h" ? "Momentum 4H/1H" : `Setup ${x.setup}${x.corrective ? " · điều chỉnh" : ""} · nến ${x.label}`;
+    box.className = "act " + x.side;
+    box.innerHTML = `<div class="act-h"><span class="act-side">${x.side === "long" ? "▲ LONG" : "▼ SHORT"}</span><span class="act-sub">${sub}${half ? " · ½ khối lượng" : ""}</span></div>
+      <div class="act-grid">
+        <div><span>Vào 3 phần</span><b>${fp(p.entries[0])}</b><small>${fp(p.entries[1])} / ${fp(p.entries[2])}</small></div>
+        <div><span>Stop loss</span><b class="down">${fp(p.sl)}</b><small>rủi ro ${fp(p.risk)}</small></div>
+        <div><span>TP1 · 1:${fmt(p.rr1, 1)}</span><b class="up">${fp(p.tp1)}</b><small>chốt ½, dời SL</small></div>
+        <div><span>TP2 · 1:${fmt(p.rr2, 1)}</span><b class="up">${fp(p.tp2)}</b><small>${p.timeStopBars ? "thoát sau " + Math.round(p.timeStopBars * 5 / 6) / 10 + "h nếu chưa TP1" : "&nbsp;"}</small></div>
+      </div>
+      <div class="act-foot">${qty ? `Khối lượng <b>${fmtQty(qty)} ${coin}</b> ≈ $${fmt(qty * p.entry, 0)} · rủi ro $${fmt(riskUsd, 0)}` : "Nhập vốn ở Cài đặt để tính khối lượng"} · nến ${hm(x.t)}${saved ? ` · còn hiệu lực ${Math.ceil((saved.exp - Date.now()) / 60000)}′` : ""}</div>`;
+    return;
+  }
+  const a = st.align, up = a.d1 === "tang" && a.h4 === "tang" && a.h1 === "tang", dn = a.d1 === "giam" && a.h4 === "giam" && a.h1 === "giam";
+  const lean = up ? "Thiên LONG · chờ nến 5M đủ chuẩn" : dn ? "Thiên SHORT · chờ nến 5M đủ chuẩn" : a.h4 === "giam" && a.h1 === "giam" ? "4H/1H giảm · chờ 5M+15M chạm BB dưới (Momentum)" : "Khung lớn chưa đồng pha · đứng ngoài";
+  const miss = (st.trig || []).filter((t) => t.why && t.why[0]).slice(0, 3).map((t) => `<div><b>${t.label}</b> ${t.why[0]}</div>`).join("");
+  box.className = "act " + (st.fire ? "warn" : "wait");
+  box.innerHTML = `<div class="act-h"><span class="act-side">${st.fire ? "CHÚ Ý" : "CHỜ"}</span><span class="act-sub">${lean}</span></div>${miss ? `<div class="act-miss">${miss}</div>` : ""}`;
+}
+// ---- Dải xu hướng 5 khung: hướng (mũi tên + màu), RSI và vị trí BB ----
+function renderTrend(st) {
+  const box = $("trendStrip"); if (!box || !st.map) return;
+  box.innerHTML = [["1d", "1D"], ["4h", "4H"], ["1h", "1H"], ["15m", "15M"], ["5m", "5M"]].map(([k, l]) => {
+    const a = st.map[k], arrow = a.dir === "tang" ? "▲" : a.dir === "giam" ? "▼" : "▬";
+    const bb = a.band === "upper" ? `<span class="tbb upper">BB trên</span>` : a.band === "lower" ? `<span class="tbb lower">BB dưới</span>` : `<span class="tbb">RSI ${Math.round(a.rsi)}</span>`;
+    return `<div class="tchip ${a.dir}"><span class="tl">${l}</span><span class="ta">${arrow}</span>${bb}</div>`;
+  }).join("");
+}
 // Vẽ một cặp lên màn hình từ dữ liệu đã quét.
 function renderPair(sym) {
   const st = stOf(sym), coin = baseOf(sym);
   $("heroPair").textContent = `${sym}.P`;
   $("toolsPair").textContent = $("setPair").textContent = coin;
   if (!st.map) {
+    renderAction(sym); $("trendStrip").innerHTML = ""; $("rvBox").innerHTML = "";
     $("trigText").textContent = st.error ? "Lỗi tải dữ liệu" : "Đang quét…";
     $("trigWhy").textContent = st.error || "";
     $("orderBox").textContent = st.error ? "Lỗi tải dữ liệu: " + st.error : "Đang tính setup…";
@@ -526,6 +565,8 @@ function renderPair(sym) {
   setStatus(st.align, st.bands);
   renderTrigger(st.trig);
   renderRV(st);
+  renderAction(sym);
+  renderTrend(st);
   if (!renderPlan(sym) && !st.fire) $("biasText").textContent = "WAIT";
   $("orderBox").textContent = (st.error ? "⚠ Lần quét gần nhất lỗi: " + st.error + "\n(đang hiện dữ liệu lần trước)\n\n" : "") + st.order;
   renderUpdated(st);
@@ -730,17 +771,19 @@ $("btnInstall").addEventListener("click", async () => {
   $("btnInstall").classList.add("hidden");
 });
 window.addEventListener("appinstalled", () => { deferredPrompt = null; $("btnInstall").classList.add("hidden"); });
+// Nút cảnh báo: chưa bật thì hiện chữ (lời nhắc quan trọng), đã bật thì chỉ còn biểu tượng chuông cho gọn.
+function setNotifyBtn(text, on) { const b = $("btnNotify"); b.textContent = on ? "🔔" : "🔕 " + (text === "Bật cảnh báo" ? "Bật báo" : text); b.title = text; b.setAttribute("aria-label", text); b.classList.toggle("icon", !!on); }
 $("btnNotify").addEventListener("click", async () => {
-  if (!("Notification" in window)) { $("btnNotify").textContent = "Thiết bị không hỗ trợ"; return; }
+  if (!("Notification" in window)) { setNotifyBtn("Thiết bị không hỗ trợ", false); return; }
   const perm = await Notification.requestPermission();
   if (perm === "granted") notify("SOLPHA", "Cảnh báo đã bật. Giữ app mở để quét mỗi 15 phút và realtime.");
-  $("btnNotify").textContent = perm === "granted" ? "Cảnh báo đã bật" : "Trình duyệt chặn thông báo";
+  setNotifyBtn(perm === "granted" ? "Cảnh báo đã bật" : "Trình duyệt chặn thông báo", perm === "granted");
 });
 $("btnRefresh").addEventListener("click", () => fullScan("manual"));
 $("selPrice").value = store.get("solpha_price_sec", "10");
 $("selPrice").addEventListener("change", () => { store.set("solpha_price_sec", $("selPrice").value); schedulePrice(); });
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js", { scope: "./" }).catch(() => {});
-if ("Notification" in window && Notification.permission === "granted") $("btnNotify").textContent = "Cảnh báo đã bật";
+if ("Notification" in window && Notification.permission === "granted") setNotifyBtn("Cảnh báo đã bật", true);
 renderLogs(); schedulePrice(); scheduleQuarter(); renderTabs(); refreshTickers(true); fullScan("boot"); wsConnect();
 // Quét ngay sau mỗi mốc 5 phút (+8s) để bắt từng nến 5M vừa đóng.
 (function scheduleWatch() {

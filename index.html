@@ -23,16 +23,16 @@
   <div class="bg"></div>
   <header class="top">
     <div class="brand">
-      <img class="logo" src="icon.svg" alt="SOLPHA" width="40" height="40" />
+      <img class="logo" src="icon.svg" alt="SOLPHA" width="34" height="34" />
       <div>
         <h1>SOLPHA</h1>
-        <p>Futures Desk · đa cặp</p>
+        <p>Futures Desk</p>
       </div>
     </div>
     <div class="top-actions">
-      <button id="btnInstall" class="btn ghost hidden">Cài app</button>
-      <button id="btnNotify" class="btn ghost">Bật cảnh báo</button>
-      <button id="btnRefresh" class="btn primary">Quét ngay</button>
+      <button id="btnInstall" class="btn ghost sm hidden">Cài app</button>
+      <button id="btnNotify" class="btn ghost sm" aria-label="Bật cảnh báo">🔕 Bật báo</button>
+      <button id="btnRefresh" class="btn primary icon" title="Quét ngay" aria-label="Quét ngay">⟳</button>
     </div>
     <img class="etek-logo" src="icons/etek-logo.png" alt="ETEK Power" width="139" height="30" />
   </header>
@@ -48,39 +48,17 @@
   </section>
   <main>
     <div class="view" data-view="signal">
-    <section class="hero card">
-      <div class="price-block">
+    <!-- Bảng điều khiển: hành động · xu hướng 5 khung · range/volume — nhìn là biết ngay -->
+    <section class="hero card cockpit">
+      <div class="hline">
         <div class="pair"><span id="heroPair">SOLUSDT.P</span> <span id="heroBadge" class="pbadge wait">CHỜ</span></div>
-        <div id="lastPrice" class="price">—</div>
-        <div id="chg24" class="chg">24h —</div>
+        <span id="updated" class="upd">—</span>
       </div>
+      <div class="pline"><span id="lastPrice" class="price">—</span><span id="chg24" class="chg">24h —</span></div>
+      <div id="actBox" class="act wait"><div class="act-h"><span class="act-side">Đang quét…</span></div></div>
+      <div id="trendStrip" class="tstrip"></div>
       <div id="rvBox" class="rvbox"></div>
-      <div class="meta-grid">
-        <div><span>Mark</span><b id="markPrice">—</b></div>
-        <div><span>Funding 8h</span><b id="funding">—</b></div>
-        <div><span>24h High</span><b id="high24">—</b></div>
-        <div><span>24h Low</span><b id="low24">—</b></div>
-        <div><span>Nguồn</span><b id="source">Binance Futures</b></div>
-        <div><span>Cập nhật</span><b id="updated">—</b></div>
-      </div>
-    </section>
-    <section class="status-row">
-      <article class="card status" id="alignCard">
-        <h2>Đồng pha</h2>
-        <p id="alignText" class="big">Đang quét…</p>
-        <p id="alignDetail" class="muted">Cần 1D + 4H + 1H cùng hướng, 15M không ngược mạnh.</p>
-      </article>
-      <article class="card status" id="alertCard">
-        <h2>Cảnh báo BB</h2>
-        <p id="alertText" class="big">—</p>
-        <p id="alertDetail" class="muted">Chạm upper nếu %B ≥ 0.95 · lower nếu %B ≤ 0.05</p>
-      </article>
-      <article class="card status" id="planCard">
-        <h2>Ưu tiên</h2>
-        <p id="biasText" class="big">WAIT</p>
-        <div id="planBox" class="plan"></div>
-        <p id="nextScan" class="muted">Quét kế tiếp (15′): —</p>
-      </article>
+      <div class="metaline">Mark <b id="markPrice">—</b> · Funding <b id="funding">—</b> · H <b id="high24">—</b> · L <b id="low24">—</b> · <span id="source">Binance Futures</span></div>
     </section>
     <section class="card" id="trigCard">
       <div class="section-head">
@@ -99,6 +77,24 @@
     </section>
     </div>
     <div class="view hidden" data-view="analysis">
+    <section class="status-row">
+      <article class="card status" id="alignCard">
+        <h2>Đồng pha</h2>
+        <p id="alignText" class="big">Đang quét…</p>
+        <p id="alignDetail" class="muted">Cần 1D + 4H + 1H cùng hướng, 15M không ngược mạnh.</p>
+      </article>
+      <article class="card status" id="alertCard">
+        <h2>Cảnh báo BB</h2>
+        <p id="alertText" class="big">—</p>
+        <p id="alertDetail" class="muted">Chạm upper nếu %B ≥ 0.95 · lower nếu %B ≤ 0.05</p>
+      </article>
+      <article class="card status" id="planCard">
+        <h2>Ưu tiên</h2>
+        <p id="biasText" class="big">WAIT</p>
+        <div id="planBox" class="plan"></div>
+        <p id="nextScan" class="muted">Quét kế tiếp (15′): —</p>
+      </article>
+    </section>
     <section class="card">
       <div class="section-head">
         <h2>Đa khung</h2>
