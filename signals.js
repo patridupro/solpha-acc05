@@ -92,6 +92,15 @@
     if (close > e21 && (e9 > e21 || slope > 0)) return "tang";
     return "sideway";
   }
+  // "1D tăng · 4H giảm · 1H giảm" — hướng từng khung để biết khung nào đang lệch pha.
+  const DIR_VI = { tang: "tăng", giam: "giảm", sideway: "đi ngang" };
+  function dirsLine(htf, tfs) {
+    const map = { "1D": htf.d1Dir, "4H": htf.h4Dir, "1H": htf.h1Dir };
+    return tfs.map((tf) => `${tf} ${DIR_VI[map[tf]] || "?"}`).join(" · ");
+  }
+  function notInPhase(htf, want, tfs = ["1D", "4H", "1H"]) {
+    return `${tfs.join("/")} chưa đồng pha ${want} (${dirsLine(htf, tfs)})`;
+  }
   // Giá ở dải ngoài khung lớn: chỉ cho vào nếu MỌI khung đang ở dải ngoài đều "bám dải" (xu hướng mạnh thật), ½ khối lượng.
   function chaseCheck(chase, dir, htf, o) {
     const band = dir === "long" ? "BB trên" : "BB dưới";
@@ -133,8 +142,8 @@
     if (res.why.length) return res;
     if (!dir) { res.why.push(`đóng giữa nến (${Math.round(pos * 100)}%)`); return res; }
     // 2) Xu hướng khung lớn
-    if (dir === "long" && !htf.up) { res.why.push("1D/4H/1H chưa cùng tăng"); return res; }
-    if (dir === "short" && !htf.down) { res.why.push("1D/4H/1H chưa cùng giảm"); return res; }
+    if (dir === "long" && !htf.up) { res.why.push(notInPhase(htf, "tăng")); return res; }
+    if (dir === "short" && !htf.down) { res.why.push(notInPhase(htf, "giảm")); return res; }
     // Chase: 4H/1D ở dải ngoài luôn chặn; riêng 1H được miễn nếu đang bám dải (lệnh Momentum, ½ khối lượng).
     const chase = dir === "long" ? (htf.chaseUp || []) : (htf.chaseDown || []);
     if (chase.length) {
@@ -199,7 +208,7 @@
       const corrOk = htf.d1Dir === "tang" && htf.h4Dir === "giam" && htf.h1Dir === "giam" && htf.d1Mid != null && k.c < htf.d1Mid;
       if (!corrOk || !o.allowCorrective) {
         if (htf.d1Dir === "tang" && htf.h4Dir === "giam" && htf.h1Dir === "giam" && htf.d1Mid != null && k.c >= htf.d1Mid) return no("1D tăng, giá chưa thủng BB mid 1D");
-        return no("1D/4H/1H chưa cùng giảm");
+        return no(notInPhase(htf, "giảm"));
       }
       corrective = true;
     }
@@ -275,7 +284,7 @@
     const volAvg = sma(P.vol.slice(i - 20, i)); res.volMult = volAvg ? k.v / volAvg : 0;
     const dir5 = trendDir(k.c, e9, P.ema9[i - 3], e21);
     // Chỉ dùng cho SHORT: 4H + 1H giảm, 5M + 15M cùng chạm BB dưới.
-    if (!(htf.h4Dir === "giam" && htf.h1Dir === "giam")) return no("4H/1H chưa cùng giảm");
+    if (!(htf.h4Dir === "giam" && htf.h1Dir === "giam")) return no(notInPhase(htf, "giảm", ["4H", "1H"]));
     // 4H và 1H phải đang CHẠM / BÁM BB dưới — chỉ "đang giảm" mà giá còn xa dải thì chưa phải lúc short theo đà.
     if (!htf.h4TouchLower && !htf.h1TouchLower) return no("4H và 1H chưa chạm BB dưới");
     if (!htf.h4TouchLower) return no("4H chưa chạm BB dưới");
