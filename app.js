@@ -403,13 +403,14 @@ function buildOrder(price, map, align, bands) {
 // Số lẻ MACD giống app Binance: BTC 1 số, ETH 2 số, coin giá nhỏ thêm 1 số so với giá.
 // Số lẻ MACD: như giá, coin giá dưới 1.000 thêm 1 số (giá trị MACD nhỏ).
 const macdDec = (p) => curDec + (p < 1000 && curDec < 4 ? 1 : 0);
+const atrCell = (a) => { const P = SolphaSignals.prepare(a.candles.slice(-100)), v = P.atr[P.candles.length - 2]; return v ? `${fp(v)} <span class="muted">${((v / a.last) * 100).toFixed(2)}%</span>` : "—"; };
 function renderTable(map) {
   const md = macdDec(map["5m"].last);
   $("tfBody").innerHTML = TFS.map((tf) => {
     const a = map[tf.key];
     const emaTxt = a.e9 && a.e21 ? `${fp(a.e9)} / ${fp(a.e21)}` : "—";
     const bandLabel = a.band === "upper" ? "CHẠM UPPER" : a.band === "lower" ? "CHẠM LOWER" : "Trong band";
-    return `<tr><td><b>${tf.label}</b></td><td><span class="tag ${a.dir}">${a.dir.toUpperCase()}</span></td><td>${fmt(a.rsi, 1)}</td><td>${emaTxt}</td><td>${a.macd ? `<span class="tag ${a.macd.dir}">${fmt(a.macd.hist, md)}</span> <span class="muted">${fmt(a.macd.macd, md)} / ${fmt(a.macd.signal, md)}</span>` : "—"}</td><td>${a.bb ? fp(a.bb.upper) : "—"}</td><td>${a.bb ? fp(a.bb.mid) : "—"}</td><td>${a.bb ? fp(a.bb.lower) : "—"}</td><td>${a.bb ? fmt(a.bb.pctB, 2) : "—"}</td><td><span class="tag ${a.band}">${bandLabel}</span></td></tr>`;
+    return `<tr><td><b>${tf.label}</b></td><td><span class="tag ${a.dir}">${a.dir.toUpperCase()}</span></td><td>${fmt(a.rsi, 1)}</td><td>${atrCell(a)}</td><td>${emaTxt}</td><td>${a.macd ? `<span class="tag ${a.macd.dir}">${fmt(a.macd.hist, md)}</span> <span class="muted">${fmt(a.macd.macd, md)} / ${fmt(a.macd.signal, md)}</span>` : "—"}</td><td>${a.bb ? fp(a.bb.upper) : "—"}</td><td>${a.bb ? fp(a.bb.mid) : "—"}</td><td>${a.bb ? fp(a.bb.lower) : "—"}</td><td>${a.bb ? fmt(a.bb.pctB, 2) : "—"}</td><td><span class="tag ${a.band}">${bandLabel}</span></td></tr>`;
   }).join("");
 }
 function setStatus(align, bands) {
@@ -558,6 +559,8 @@ function renderAction(sym) {
     const p = x.plan, coin = baseOf(sym), half = (p.sizeFactor || 1) < 1;
     const acct = Number(store.get("solpha_acct", "0")), riskPct = Number(store.get("solpha_risk", "1")) * (p.sizeFactor || 1);
     const riskUsd = acct * riskPct / 100, qty = riskUsd && p.risk ? riskUsd / p.risk : 0;
+    // Khoảng cách SL/TP quy ra bội số ATR của khung nến tín hiệu (5M hoặc 15M) để cân đối.
+    const atrK = x.key === "15m" ? "15m" : "5m", atrSig = atrOf(st, atrK), dA = (d) => (atrSig ? ` · ${fmt(Math.abs(d) / atrSig, 1)}×ATR ${atrK.toUpperCase()}` : "");
     const sub = x.engine === "m4h" ? "Momentum 4H/1H" : `Setup ${x.setup}${x.corrective ? " · điều chỉnh" : ""} · nến ${x.label}`;
     // MỚI = nến tín hiệu vừa đóng; ĐANG GIỮ = kế hoạch từ tín hiệu trước đó, còn hiệu lực.
     const ago = Math.round((Date.now() - planClose(x)) / 60000);
@@ -568,9 +571,9 @@ function renderAction(sym) {
     box.innerHTML = `${tag}<div class="act-h"><span class="act-side">${x.side === "long" ? "▲ LONG" : "▼ SHORT"}</span><span class="act-sub">${sub}${half ? " · ½ khối lượng" : ""}</span></div>
       <div class="act-grid">
         <div><span>Vào 3 phần</span><b>${fp(p.entries[0])}</b><small>${fp(p.entries[1])} / ${fp(p.entries[2])}</small></div>
-        ${saved && saved.status.code === "tp1" ? `<div><span>Stop loss (đã dời)</span><b>${fp(p.entry)}</b><small>hoà vốn · SL gốc ${fp(p.sl)}</small></div>` : `<div><span>Stop loss</span><b class="down">${fp(p.sl)}</b><small>rủi ro ${fp(p.risk)}</small></div>`}
-        <div><span>TP1 · 1:${fmt(p.rr1, 1)}</span><b class="up">${fp(p.tp1)}</b><small>chốt ½, dời SL</small></div>
-        <div><span>TP2 · 1:${fmt(p.rr2, 1)}</span><b class="up">${fp(p.tp2)}</b><small>${p.timeStopBars ? "thoát sau " + Math.round(p.timeStopBars * 5 / 6) / 10 + "h nếu chưa TP1" : "&nbsp;"}</small></div>
+        ${saved && saved.status.code === "tp1" ? `<div><span>Stop loss (đã dời)</span><b>${fp(p.entry)}</b><small>hoà vốn · SL gốc ${fp(p.sl)}</small></div>` : `<div><span>Stop loss</span><b class="down">${fp(p.sl)}</b><small>−${fp(Math.abs(p.entry - p.sl))}${dA(p.entry - p.sl)}</small></div>`}
+        <div><span>TP1 · 1:${fmt(p.rr1, 1)}</span><b class="up">${fp(p.tp1)}</b><small>+${fp(Math.abs(p.tp1 - p.entry))}${dA(p.tp1 - p.entry)} · chốt ½</small></div>
+        <div><span>TP2 · 1:${fmt(p.rr2, 1)}</span><b class="up">${fp(p.tp2)}</b><small>+${fp(Math.abs(p.tp2 - p.entry))}${dA(p.tp2 - p.entry)}${p.timeStopBars ? " · thoát sau " + Math.round(p.timeStopBars * 5 / 6) / 10 + "h nếu chưa TP1" : ""}</small></div>
       </div>
       <div class="act-foot">${qty ? `Khối lượng <b>${fmtQty(qty)} ${coin}</b> ≈ $${fmt(qty * p.entry, 0)} · rủi ro $${fmt(riskUsd, 0)}` : "Nhập vốn ở Cài đặt để tính khối lượng"}</div>`;
     return;
@@ -584,12 +587,19 @@ function renderAction(sym) {
   box.innerHTML = `<div class="act-h"><span class="act-side">${st.fire ? "CHÚ Ý" : "CHỜ"}</span><span class="act-sub">${lean}</span></div>${miss ? `<div class="act-miss">${miss}</div>` : ""}${outTxt}`;
 }
 // ---- Dải xu hướng 5 khung: hướng (mũi tên + màu), RSI và vị trí BB ----
+// ATR(14) của nến đã đóng gần nhất ở một khung — thước đo biên độ để đặt SL/TP (Wilder, 100 nến là đủ hội tụ).
+function atrOf(st, k) {
+  const c = st.map && st.map[k] && st.map[k].candles; if (!c || c.length < 20) return null;
+  const P = SolphaSignals.prepare(c.slice(-100)); return P.atr[P.candles.length - 2] || null;
+}
 function renderTrend(st) {
   const box = $("trendStrip"); if (!box || !st.map) return;
+  const px = st.price || (st.ticker && st.ticker.last);
   box.innerHTML = [["1d", "1D"], ["4h", "4H"], ["1h", "1H"], ["15m", "15M"], ["5m", "5M"]].map(([k, l]) => {
     const a = st.map[k], arrow = a.dir === "tang" ? "▲" : a.dir === "giam" ? "▼" : "▬";
     const bb = a.band === "upper" ? `<span class="tbb upper">BB trên</span>` : a.band === "lower" ? `<span class="tbb lower">BB dưới</span>` : `<span class="tbb">RSI ${Math.round(a.rsi)}</span>`;
-    return `<div class="tchip ${a.dir}"><span class="tl">${l}</span><span class="ta">${arrow}</span>${bb}</div>`;
+    const atr = atrOf(st, k), atrTxt = atr ? `<span class="tatr" title="ATR(14) khung ${l}">ATR ${fp(atr)}</span><span class="tatrp">${px ? ((atr / px) * 100).toFixed(2) + "%" : ""}</span>` : "";
+    return `<div class="tchip ${a.dir}"><span class="tl">${l}</span><span class="ta">${arrow}</span>${bb}${atrTxt}</div>`;
   }).join("");
 }
 // Vẽ một cặp lên màn hình từ dữ liệu đã quét.
