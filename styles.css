@@ -345,3 +345,5 @@ input, select, textarea { color: var(--text); }
 .held.short { background: rgba(217,59,59,.07); } .held.long { background: rgba(24,152,72,.08); }
 .tchip .tatr { font-size: 10.5px; font-weight: 700; color: var(--text); white-space: nowrap; margin-top: 2px; }
 .tchip .tatrp { font-size: 9.5px; color: var(--muted); }
+.act-tag.late { background: var(--warn); color: #fff; }
+.act.late .act-grid { opacity: .75; }

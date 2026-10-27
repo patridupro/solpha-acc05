@@ -189,8 +189,11 @@
     // BB 1H là vùng cản: nếu nằm giữa TP1 và 3R thì chốt TP2 sớm tại đó.
     const h1Band = dir === "long" ? htf.h1Upper : htf.h1Lower;
     if (h1Band && sgn * (h1Band - tp1) > 0 && sgn * (tp2 - h1Band) > 0) tp2 = h1Band;
+    // Vùng cản nằm sát ngay sau TP1 (TP2 cách TP1 < 0.5R) → không có TP2 thật: chốt hết ở TP1.
+    const tp2Merged = Math.abs(tp2 - tp1) < 0.5 * risk ? (dir === "long" ? "BB trên 1H" : "BB dưới 1H") : null;
+    if (tp2Merged) tp2 = tp1;
     res.side = dir;
-    res.plan = { entries: [e1, e2, e3], entry, sl, tp1, tp2, risk, rr1: o.tp1R, rr2: Math.abs(tp2 - entry) / risk, slFromClose: Math.abs(e1 - sl), sizeFactor: res.momentum ? o.walkSize : 1 };
+    res.plan = { entries: [e1, e2, e3], entry, sl, tp1, tp2, risk, rr1: o.tp1R, rr2: Math.abs(tp2 - entry) / risk, slFromClose: Math.abs(e1 - sl), sizeFactor: res.momentum ? o.walkSize : 1, tp2Merged };
     return res;
   }
 
@@ -254,16 +257,20 @@
       if (risk <= 0 || risk > o.sMaxRiskATR * atr) { lastRisk = risk / atr; continue; }
       const tp1 = entry - o.tp1R * risk;
       let tp2 = entry - o.tp2R * risk;
-      if (htf.h1Lower && htf.h1Lower < tp1 && htf.h1Lower > tp2) tp2 = htf.h1Lower;
+      let cap = null;
+      if (htf.h1Lower && htf.h1Lower < tp1 && htf.h1Lower > tp2) { tp2 = htf.h1Lower; cap = "BB dưới 1H"; }
       if (corrective && htf.d1Lower != null) {
         // Điều chỉnh: BB dưới 1D là vùng đỡ của xu hướng tăng → TP2 không vượt quá; TP1 cũng phải trước nó.
         if (tp1 <= htf.d1Lower) { return no(`TP1 vượt BB dưới 1D (${htf.d1Lower.toFixed(2)})`); }
-        if (tp2 < htf.d1Lower) tp2 = htf.d1Lower;
+        if (tp2 < htf.d1Lower) { tp2 = htf.d1Lower; cap = "BB dưới 1D"; }
       }
+      // Vùng đỡ nằm sát ngay sau TP1 (TP2 cách TP1 < 0.5R) → không có TP2 thật: chốt hết ở TP1.
+      const tp2Merged = tp1 - tp2 < 0.5 * risk ? cap || "vùng đỡ" : null;
+      if (tp2Merged) tp2 = tp1;
       res.setup = setup;
       res.side = "short";
       res.plan = { entries: [e1, e2, e3], entry, sl, tp1, tp2, risk, rr1: o.tp1R, rr2: (entry - tp2) / risk, slFromClose: sl - e1,
-        sizeFactor: setup === "S2" || res.momentum || corrective ? o.walkSize : 1, timeStopBars: o.sTimeStopBars, partialTP1: 0.5, corrective };
+        sizeFactor: setup === "S2" || res.momentum || corrective ? o.walkSize : 1, timeStopBars: o.sTimeStopBars, partialTP1: tp2Merged ? 0 : 0.5, corrective, tp2Merged };
       return res;
     }
     return no(`SL quá xa (${lastRisk.toFixed(1)}×ATR)`);

@@ -260,7 +260,7 @@ function planText(x, sym) {
       `Vào 3 phần: ${p.entries.map((e) => fp(e)).join(" / ")} (TB ${fp(p.entry)})`,
       `SL: ${fp(p.sl)} (rủi ro ${fp(p.risk)}/${coin})`,
       `TP1: ${fp(p.tp1)} (R:R 1:${fmt(p.rr1, 1)}) → ${p.partialTP1 ? "chốt ½, " : ""}dời SL về giá vào`,
-      `TP2: ${fp(p.tp2)} (R:R 1:${fmt(p.rr2, 1)})`,
+      p.tp2Merged ? `TP2: = TP1 (${p.tp2Merged} chặn ngay sau TP1 → chốt hết)` : `TP2: ${fp(p.tp2)} (R:R 1:${fmt(p.rr2, 1)})`,
       qty ? `Khối lượng: ${fmtQty(qty)} ${coin} ≈ $${fmt(qty * p.entry, 0)} · đòn bẩy ≈ ${fmt(qty * p.entry / acct, 1)}x (rủi ro $${fmt(riskUsd, 0)} = ${riskPct}% vốn), mỗi phần ${fmtQty(qty / 3)} ${coin}`
           : "Nhập vốn ở mục Cài đặt để app tính khối lượng.",
       ...(p.timeStopBars ? [`Giới hạn thời gian: chưa chạm TP1 sau ${Math.round(p.timeStopBars * 5 / 60 * 10) / 10} giờ → thoát lệnh`] : []),
@@ -271,14 +271,17 @@ function planText(x, sym) {
 const TF_MIN = { "5m": 5, "15m": 15, m4h: 5 };
 const planClose = (x) => x.t + (TF_MIN[x.key] || 5) * 60000; // lúc nến tín hiệu đóng
 function rawPlan(sym) { try { return JSON.parse(pget("solpha_last_plan", "null", sym)); } catch (_) { return null; } }
-// Kế hoạch hiệu lực 30 phút tính từ lúc nến tín hiệu ĐÓNG. Chỉ thay bằng tín hiệu mới hơn — không gia hạn lại cùng một nến.
+// Hiệu lực tính từ lúc nến tín hiệu ĐÓNG = 3 nến 5M (15′) cho tín hiệu 5M/Momentum, 2 nến 15M (30′) cho tín hiệu 15M:
+// đủ để giá hồi về mức vào thứ 2–3; lâu hơn thì bối cảnh đã đổi. Ngoài ra còn kiểm tra R:R nếu vào ở giá hiện tại.
+const PLAN_VALID_MIN = { "5m": 15, m4h: 15, "15m": 30 };
+// Kế hoạch hiệu lực tính từ lúc nến tín hiệu ĐÓNG. Chỉ thay bằng tín hiệu mới hơn — không gia hạn lại cùng một nến.
 function persistPlan(sym, cands) {
   const hits = cands.filter((x) => x && x.side && x.plan);
   if (!hits.length) return;
   const best = hits.sort((a, b) => planClose(b) - planClose(a) || (a.key === "5m" ? -1 : b.key === "5m" ? 1 : 0))[0];
   const cur = rawPlan(sym);
   if (cur && cur.x && planClose(cur.x) >= planClose(best)) return;
-  store.set(pkey("solpha_last_plan", sym), JSON.stringify({ x: best, exp: planClose(best) + 30 * 60000 }));
+  store.set(pkey("solpha_last_plan", sym), JSON.stringify({ x: best, exp: planClose(best) + (PLAN_VALID_MIN[best.key] || 15) * 60000 }));
 }
 // Theo dõi giá sau khi nến tín hiệu đóng: chạm SL / TP1 / TP2 / về hoà vốn. Nến chạm cả SL và TP1 tính là SL (như backtest).
 function planStatus(sym, s) {
@@ -289,7 +292,7 @@ function planStatus(sym, s) {
     if (k.t < from) continue;
     if (!tp1At) {
       if (short ? k.h >= p.sl : k.l <= p.sl) return { code: "sl", t: k.t };
-      if (short ? k.l <= p.tp1 : k.h >= p.tp1) tp1At = k.t;
+      if (short ? k.l <= p.tp1 : k.h >= p.tp1) { if (p.tp2Merged) return { code: "tpall", t: k.t }; tp1At = k.t; }
     } else {
       if (short ? k.l <= p.tp2 : k.h >= p.tp2) return { code: "tp2", t: k.t };
       if (short ? k.h >= p.entry : k.l <= p.entry) return { code: "be", t: k.t };
@@ -564,25 +567,30 @@ function renderAction(sym) {
     const sub = x.engine === "m4h" ? "Momentum 4H/1H" : `Setup ${x.setup}${x.corrective ? " · điều chỉnh" : ""} · nến ${x.label}`;
     // MỚI = nến tín hiệu vừa đóng; ĐANG GIỮ = kế hoạch từ tín hiệu trước đó, còn hiệu lực.
     const ago = Math.round((Date.now() - planClose(x)) / 60000);
+    // R:R nếu vào ở giá hiện tại: < 1 nghĩa là giá đã chạy quá xa về phía TP1 → không vào mới (người đã vào thì giữ theo kế hoạch).
+    const px = (st.ticker && st.ticker.last) || st.price, short = x.side === "short";
+    const rrNow = px ? (short ? (px - p.tp1) / (p.sl - px) : (p.tp1 - px) / (px - p.sl)) : null;
+    const late = saved && saved.status.code === "open" && rrNow != null && rrNow < 1;
     const tag = !saved ? `<div class="act-tag new">MỚI · nến ${x.label} ${hm(x.t)} vừa đóng</div>`
       : saved.status.code === "tp1" ? `<div class="act-tag tp">ĐÃ CHẠM TP1 lúc ${hm(saved.status.t)} ✓ · dời SL về giá vào, giữ phần còn lại tới TP2</div>`
-      : `<div class="act-tag hold">ĐANG GIỮ · tín hiệu nến ${x.label} ${hm(x.t)} (đóng ${ago}′ trước) · còn hiệu lực ${Math.max(0, Math.ceil((saved.exp - Date.now()) / 60000))}′</div>`;
-    box.className = "act " + x.side + (saved ? " hold" : "");
+      : `<div class="act-tag hold">ĐANG GIỮ · tín hiệu nến ${x.label} ${hm(x.t)} (đóng ${ago}′ trước) · còn hiệu lực ${Math.max(0, Math.ceil((saved.exp - Date.now()) / 60000))}′</div>`
+        + (late ? `<div class="act-tag late">GIÁ ĐÃ CHẠY XA · vào lúc này R:R chỉ 1:${fmt(Math.max(rrNow, 0), 1)} → không vào mới, đã vào thì giữ theo kế hoạch</div>` : "");
+    box.className = "act " + x.side + (saved ? " hold" : "") + (late ? " late" : "");
     box.innerHTML = `${tag}<div class="act-h"><span class="act-side">${x.side === "long" ? "▲ LONG" : "▼ SHORT"}</span><span class="act-sub">${sub}${half ? " · ½ khối lượng" : ""}</span></div>
       <div class="act-grid">
         <div><span>Vào 3 phần</span><b>${fp(p.entries[0])}</b><small>${fp(p.entries[1])} / ${fp(p.entries[2])}</small></div>
         ${saved && saved.status.code === "tp1" ? `<div><span>Stop loss (đã dời)</span><b>${fp(p.entry)}</b><small>hoà vốn · SL gốc ${fp(p.sl)}</small></div>` : `<div><span>Stop loss</span><b class="down">${fp(p.sl)}</b><small>−${fp(Math.abs(p.entry - p.sl))}${dA(p.entry - p.sl)}</small></div>`}
-        <div><span>TP1 · 1:${fmt(p.rr1, 1)}</span><b class="up">${fp(p.tp1)}</b><small>+${fp(Math.abs(p.tp1 - p.entry))}${dA(p.tp1 - p.entry)} · chốt ½</small></div>
-        <div><span>TP2 · 1:${fmt(p.rr2, 1)}</span><b class="up">${fp(p.tp2)}</b><small>+${fp(Math.abs(p.tp2 - p.entry))}${dA(p.tp2 - p.entry)}${p.timeStopBars ? " · thoát sau " + Math.round(p.timeStopBars * 5 / 6) / 10 + "h nếu chưa TP1" : ""}</small></div>
+        <div><span>TP1 · 1:${fmt(p.rr1, 1)}</span><b class="up">${fp(p.tp1)}</b><small>+${fp(Math.abs(p.tp1 - p.entry))}${dA(p.tp1 - p.entry)} · ${p.tp2Merged ? "chốt hết" : "chốt ½"}</small></div>
+        ${p.tp2Merged ? `<div><span>TP2</span><b class="muted">= TP1</b><small>${p.tp2Merged} chặn ngay sau TP1 → chốt hết ở TP1${p.timeStopBars ? " · thoát sau " + Math.round(p.timeStopBars * 5 / 6) / 10 + "h nếu chưa TP1" : ""}</small></div>` : `<div><span>TP2 · 1:${fmt(p.rr2, 1)}</span><b class="up">${fp(p.tp2)}</b><small>+${fp(Math.abs(p.tp2 - p.entry))}${dA(p.tp2 - p.entry)}${p.timeStopBars ? " · thoát sau " + Math.round(p.timeStopBars * 5 / 6) / 10 + "h nếu chưa TP1" : ""}</small></div>`}
       </div>
-      <div class="act-foot">${qty ? `Khối lượng <b>${fmtQty(qty)} ${coin}</b> ≈ $${fmt(qty * p.entry, 0)} · rủi ro $${fmt(riskUsd, 0)}` : "Nhập vốn ở Cài đặt để tính khối lượng"}</div>`;
+      <div class="act-foot">${rrNow != null && (!saved || saved.status.code === "open") ? `Vào ngay ${fp(px)}: R:R <b>1:${fmt(Math.max(rrNow, 0), 1)}</b> · ` : ""}${qty ? `Khối lượng <b>${fmtQty(qty)} ${coin}</b> ≈ $${fmt(qty * p.entry, 0)} · rủi ro $${fmt(riskUsd, 0)}` : "Nhập vốn ở Cài đặt để tính khối lượng"}</div>`;
     return;
   }
   const a = st.align, up = a.d1 === "tang" && a.h4 === "tang" && a.h1 === "tang", dn = a.d1 === "giam" && a.h4 === "giam" && a.h1 === "giam";
   const lean = up ? "Thiên LONG · chờ nến 5M đủ chuẩn" : dn ? "Thiên SHORT · chờ nến 5M đủ chuẩn" : a.h4 === "giam" && a.h1 === "giam" ? "4H/1H giảm · chờ 5M+15M chạm BB dưới (Momentum)" : "Khung lớn chưa đồng pha · đứng ngoài";
   const miss = (st.trig || []).filter((t) => t.why && t.why[0]).slice(0, 3).map((t) => `<div><b>${t.label}</b> ${t.why[0]}</div>`).join("");
   box.className = "act " + (st.fire ? "warn" : "wait");
-  const out = lastOutcome(sym), OUT = { sl: "chạm SL ✗", tp2: "chạm TP2 ✓✓", be: "chạm TP1 rồi về hoà vốn ✓", open: "hết 30′ hiệu lực", tp1: "chạm TP1 ✓, hết giờ giữ phần còn lại" };
+  const out = lastOutcome(sym), OUT = { sl: "chạm SL ✗", tp2: "chạm TP2 ✓✓", tpall: "chạm TP1, chốt hết ✓", be: "chạm TP1 rồi về hoà vốn ✓", open: "hết hiệu lực", tp1: "chạm TP1 ✓, hết giờ giữ phần còn lại" };
   const outTxt = out ? `<div class="act-out">Kế hoạch gần nhất: ${out.s.x.side.toUpperCase()} ${out.s.x.engine === "m4h" ? "M4H" : out.s.x.setup} nến ${hmVN(out.s.x.t)} → <b>${OUT[out.st.code]}</b>${out.st.t ? " lúc " + hmVN(out.st.t) : ""}</div>` : "";
   box.innerHTML = `<div class="act-h"><span class="act-side">${st.fire ? "CHÚ Ý" : "CHỜ"}</span><span class="act-sub">${lean}</span></div>${miss ? `<div class="act-miss">${miss}</div>` : ""}${outTxt}`;
 }
