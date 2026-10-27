@@ -282,7 +282,12 @@ function planText(x, sym) {
 }
 const TF_MIN = { "5m": 5, "15m": 15, m4h: 5 };
 const planClose = (x) => x.t + (TF_MIN[x.key] || 5) * 60000; // lúc nến tín hiệu đóng
-function rawPlan(sym) { try { return JSON.parse(pget("solpha_last_plan", "null", sym)); } catch (_) { return null; } }
+// Kế hoạch đã lưu từ bản cũ chưa có tp2Merged: áp lại quy tắc TP2 sát TP1 (< 0.5R) → chốt hết ở TP1.
+function normPlan(p) {
+  if (p && !p.tp2Merged && p.risk > 0 && Math.abs(p.tp2 - p.tp1) < 0.5 * p.risk) { p.tp2Merged = "vùng cản"; p.tp2 = p.tp1; p.rr2 = p.rr1; p.partialTP1 = 0; }
+  return p;
+}
+function rawPlan(sym) { try { const s = JSON.parse(pget("solpha_last_plan", "null", sym)); if (s && s.x) normPlan(s.x.plan); return s; } catch (_) { return null; } }
 // Hiệu lực tính từ lúc nến tín hiệu ĐÓNG = 3 nến 5M (15′) cho tín hiệu 5M/Momentum, 2 nến 15M (30′) cho tín hiệu 15M:
 // đủ để giá hồi về mức vào thứ 2–3; lâu hơn thì bối cảnh đã đổi. Ngoài ra còn kiểm tra R:R nếu vào ở giá hiện tại.
 const PLAN_VALID_MIN = { "5m": 15, m4h: 15, "15m": 30 };
