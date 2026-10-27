@@ -13,7 +13,7 @@ const store = {
 // Mỗi tín hiệu (khung + nến + hướng) chỉ báo một lần; danh sách lưu lại để quét bù không báo trùng.
 const seenKeys = (() => { try { return new Set(JSON.parse(store.get("solpha_seen", "[]"))); } catch (_) { return new Set(); } })();
 function markSeen(key) { seenKeys.add(key); store.set("solpha_seen", JSON.stringify([...seenKeys].slice(-300))); }
-let scanning = false, lastScanAt = 0, wakeLock = null;
+let scanning = false, lastScanAt = 0, wakeLock = null, retryTimer = null, retryCount = 0;
 // ---- Nhiều cặp: mỗi cặp có dữ liệu, tín hiệu, cài đặt và kế hoạch lệnh riêng ----
 const DEFAULT_PAIRS = ["SOL", "BTC", "ETH", "DOGE"];
 const symOf = (base) => base + "USDT";
@@ -108,22 +108,34 @@ const hmVN = (t) => new Date(t).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho
 function nowVN() {
   return new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
 }
-async function fetchJSON(url) {
-  // Có giới hạn thời gian: Android hay treo kết nối khi app bị đóng băng, không có timeout thì cả vòng cập nhật đứng yên.
-  const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 6000);
+// Theo dõi lúc app bị chuyển xuống nền: Android đóng băng/chặn mạng của app nền, yêu cầu đang tải bị treo rồi hết giờ.
+let hiddenSince = document.visibilityState === "hidden" ? Date.now() : 0, lastShownAt = 0;
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") hiddenSince = Date.now(); else { hiddenSince = 0; lastShownAt = Date.now(); } });
+const waitVisible = () => new Promise((r) => {
+  if (document.visibilityState === "visible") return r();
+  const f = () => { if (document.visibilityState === "visible") { document.removeEventListener("visibilitychange", f); r(); } };
+  document.addEventListener("visibilitychange", f);
+});
+async function fetchJSON(url, ms = 6000, retry = true) {
+  // Có giới hạn thời gian: không có timeout thì một kết nối treo làm cả vòng cập nhật đứng yên.
+  const t0 = Date.now(), ctl = new AbortController(), to = setTimeout(() => ctl.abort(new Error(`quá ${ms / 1000} giây không phản hồi`)), ms);
   try {
     const res = await fetch(url, { cache: "no-store", signal: ctl.signal });
     if (!res.ok) throw new Error(res.status + " " + url);
     return await res.json();
+  } catch (e) {
+    // Lỗi vì app vừa nằm nền trong lúc tải → chờ app hiện lại rồi thử lại một lần, không báo lỗi.
+    if (retry && (hiddenSince || lastShownAt >= t0)) { await waitVisible(); return fetchJSON(url, ms, false); }
+    throw e;
   } finally { clearTimeout(to); }
 }
-async function withBase(pathSpot, pathFutures) {
+async function withBase(pathSpot, pathFutures, ms) {
   const errors = [];
   for (const base of ENDPOINTS) {
     const futures = base.includes("fapi");
     const path = futures ? pathFutures : pathSpot;
     try {
-      const data = await fetchJSON(base + path);
+      const data = await fetchJSON(base + path, ms);
       return { data, source: futures ? "Binance Futures" : "Binance Spot" };
     } catch (e) { errors.push(String(e.message || e)); }
   }
@@ -159,11 +171,11 @@ function renderUpdated(st) {
 }
 async function loadKlinesUntil(sym, interval, limit, endTime) {
   const q = `symbol=${sym}&interval=${interval}&limit=${limit}&endTime=${endTime}`;
-  const { data } = await withBase(`/api/v3/klines?${q.replace(`limit=${limit}`, `limit=${Math.min(limit, 1000)}`)}`, `/fapi/v1/klines?${q}`);
+  const { data } = await withBase(`/api/v3/klines?${q.replace(`limit=${limit}`, `limit=${Math.min(limit, 1000)}`)}`, `/fapi/v1/klines?${q}`, 15000);
   return data.map((k) => ({ t: k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5] }));
 }
 async function loadKlines(sym, interval, limit = 220) {
-  const { data } = await withBase(`/api/v3/klines?symbol=${sym}&interval=${interval}&limit=${Math.min(limit, 1000)}`, `/fapi/v1/klines?symbol=${sym}&interval=${interval}&limit=${limit}`);
+  const { data } = await withBase(`/api/v3/klines?symbol=${sym}&interval=${interval}&limit=${Math.min(limit, 1000)}`, `/fapi/v1/klines?symbol=${sym}&interval=${interval}&limit=${limit}`, 12000); // nến nặng hơn giá → chờ lâu hơn
   return data.map((k) => ({ t: k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5] }));
 }
 function analyze(candles) {
@@ -555,7 +567,7 @@ function renderRV(st) {
 // ---- Ô HÀNH ĐỘNG: có tín hiệu → LONG/SHORT + giá vào, SL, TP, khối lượng; chưa có → CHỜ + đang thiếu gì ----
 function renderAction(sym) {
   const st = stOf(sym), box = $("actBox"); if (!box) return;
-  if (!st.map) { box.className = "act wait"; box.innerHTML = `<div class="act-h"><span class="act-side">${st.error ? "Lỗi tải dữ liệu" : "Đang quét…"}</span></div>`; return; }
+  if (!st.map) { box.className = "act wait"; box.innerHTML = st.error ? `<div class="act-h"><span class="act-side">Mất kết nối dữ liệu</span><span class="act-sub">mạng chậm hoặc app vừa chạy nền · đang tự thử lại${retryCount ? " (lần " + retryCount + ")" : ""}…</span></div>` : `<div class="act-h"><span class="act-side">Đang quét…</span></div>`; return; }
   const live = st.trig && (st.trig.find((x) => x.side && x.key === "5m") || st.trig.find((x) => x.side && x.key === "15m") || st.trig.find((x) => x.side));
   const saved = live ? null : savedPlan(sym), x = live || (saved && saved.x), hm = hmVN;
   if (x) {
@@ -617,7 +629,7 @@ function renderPair(sym) {
   $("toolsPair").textContent = $("setPair").textContent = coin;
   if (!st.map) {
     renderAction(sym); $("trendStrip").innerHTML = ""; $("rvBox").innerHTML = "";
-    $("trigText").textContent = st.error ? "Lỗi tải dữ liệu" : "Đang quét…";
+    $("trigText").textContent = st.error ? "Mất kết nối dữ liệu · đang tự thử lại" : "Đang quét…";
     $("trigWhy").textContent = st.error || "";
     $("orderBox").textContent = st.error ? "Lỗi tải dữ liệu: " + st.error : "Đang tính setup…";
     return;
@@ -767,6 +779,10 @@ async function fullScan(reason = "manual", onlyActive = false) {
   nextHourLabel();
   lastScanAt = Date.now();
   scanning = false;
+  // Cặp nào lỗi thì tự thử lại sau 15″, 30″, 45″, 60″ — không chờ tới mốc 5 phút kế tiếp.
+  clearTimeout(retryTimer);
+  if (order.some((s) => stOf(s).error)) { if (retryCount < 4) { retryCount++; retryTimer = setTimeout(() => fullScan("retry"), 15000 * retryCount); } }
+  else retryCount = 0;
 }
 // Quét bù: xem lại các nến 5M đã đóng trong 90 phút qua bằng đúng bộ máy tín hiệu, liệt kê tín hiệu (kể cả khi app "ngủ"
 // lúc nó xảy ra) và báo bù những tín hiệu chưa từng báo. Không áp dụng bộ lọc funding trừ khi funding hiện tại đã quá âm.
@@ -801,7 +817,7 @@ async function catchUp(sym, map, gapMin) {
   }
 }
 // App thức dậy (mở lại / quay lại từ app khác): quét ngay thay vì chờ mốc 5 phút kế tiếp.
-function wake(reason) { if (Date.now() - lastScanAt > 45000) fullScan(reason); }
+function wake(reason) { if (Date.now() - lastScanAt > 45000 || pairs.some((b) => { const st = stOf(symOf(b)); return st.error || !st.map; })) { retryCount = 0; fullScan(reason); } }
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { wake("resume"); if (!wsOk()) wsConnect(); refreshTickers(); if (store.get("solpha_wake", "0") === "1") setWake(true); } });
 window.addEventListener("pageshow", () => wake("resume"));
 window.addEventListener("focus", () => wake("resume"));
