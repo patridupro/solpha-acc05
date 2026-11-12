@@ -26,3 +26,8 @@
 
 /icons/*
   Cache-Control: public, max-age=604800
+
+/.well-known/assetlinks.json
+  Content-Type: application/json
+  Cache-Control: no-cache
+  Access-Control-Allow-Origin: *
