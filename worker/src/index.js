@@ -315,12 +315,12 @@ async function removeTokenFromDevice(env, deviceId, hash) {
  * Làm mới một token từ Google, cập nhật KV, acknowledge nếu cần.
  * Trả bản ghi mới. Ném lỗi mạng/API (GoogleError) cho caller xử lý.
  */
-async function refreshRecord(env, hash, purchaseToken, prev, now = Date.now()) {
+async function refreshRecord(env, hash, purchaseToken, prev, now = Date.now(), opts = {}) {
   let parsed;
   try {
     parsed = await fetchSubscription(env, purchaseToken);
   } catch (e) {
-    if (e instanceof GoogleError && e.kind === "invalid" && prev) {
+    if (e instanceof GoogleError && e.kind === "invalid" && prev && opts.markInvalid !== false) {
       const rec = { ...prev, state: "INVALID", expiryMs: 0, updatedAt: now };
       await kvPut(env, "tok:" + hash, rec);
       return rec;
@@ -441,7 +441,7 @@ export async function handleVerify(request, env, cors = {}) {
     // Bản ghi chưa có -> tạo trước (không có state) để refreshRecord ghi đè.
     const base = prev || { sku, deviceId, state: "UNKNOWN", expiryMs: 0, ackedAt: null, updatedAt: 0 };
     base.tokenEnc = await encryptToken(env, purchaseToken);
-    rec = await refreshRecord(env, hash, purchaseToken, base, now);
+    rec = await refreshRecord(env, hash, purchaseToken, base, now, { markInvalid: false });
   } catch (e) {
     if (e instanceof GoogleError && e.kind === "invalid") {
       log("warn", "verify_invalid_token", { tok: shortId(hash), status: e.status });
