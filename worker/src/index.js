@@ -333,10 +333,10 @@ async function refreshRecord(env, hash, purchaseToken, prev, now = Date.now()) {
     sku,
     state: parsed.state,
     expiryMs: parsed.expiryMs,
-    ackedAt: parsed.acknowledged ? (prev && prev.ackedAt) || now : (prev && prev.ackedAt) || null,
+    // Google là nguồn sự thật cho trạng thái acknowledge.
+    ackedAt: parsed.acknowledged ? (prev && prev.ackedAt) || now : null,
     updatedAt: now,
   };
-  if (parsed.acknowledged) rec.ackedAt = rec.ackedAt || now;
   let ackFailed = false;
   if (!parsed.acknowledged && isActive(parsed.state, parsed.expiryMs, now)) {
     // BẮT BUỘC acknowledge trong 3 ngày, nếu không Google tự hoàn tiền.

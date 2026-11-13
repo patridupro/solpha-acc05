@@ -1,0 +1,26 @@
+# Cloudflare Worker: solpha-billing
+# Triển khai: xem worker/README.md
+name = "solpha-billing"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+workers_dev = true
+
+# Biến công khai (không phải bí mật)
+[vars]
+PACKAGE_NAME = "app.solpha.desk"
+# Các origin được phép gọi API (cách nhau bằng dấu phẩy). https://solpha.pages.dev luôn được phép.
+ALLOWED_ORIGINS = "https://solpha.pages.dev"
+# Danh sách SKU hợp lệ (mặc định đúng 2 SKU dưới đây)
+SKUS = "solpha_pro_monthly,solpha_pro_yearly"
+
+# KV lưu quyền lợi. Tạo bằng:  npx wrangler kv namespace create ENT
+# rồi dán id trả về vào dưới đây.
+[[kv_namespaces]]
+binding = "ENT"
+id = "THAY_BANG_ID_KV_NAMESPACE"
+
+# ---- BÍ MẬT (KHÔNG ghi giá trị vào file này) ----
+# Đặt bằng:  npx wrangler secret put <TEN>
+#   GOOGLE_SA_JSON  : toàn bộ nội dung file JSON khoá của service account Google Cloud
+#   RTDN_KEY        : chuỗi ngẫu nhiên dài (>= 32 ký tự) dùng trong ?key= của Pub/Sub push
+#   TOKEN_ENC_KEY   : (tuỳ chọn) khoá mã hoá purchaseToken khi lưu KV; bỏ trống thì dùng RTDN_KEY
