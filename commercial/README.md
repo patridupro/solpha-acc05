@@ -83,6 +83,6 @@ Xem `LICENSE.md` (Single / Extended) và `docs/SUPPORT.md`.
 
 **Requirements:** any static HTTPS host and a domain; Node 18+ only for tests and icon generation; Google Play Console for Android.
 
-**Quick start:** unzip, read `docs/INSTALL.md`, fill in every `{{PLACEHOLDER}}`, deploy the folder root, verify the app is installable, optionally rebrand via `docs/CUSTOMIZE.md`.
+**Quick start:** unzip, read `docs/INSTALL.md`, fill in every double-brace placeholder, deploy the folder root, verify the app is installable, optionally rebrand via `docs/CUSTOMIZE.md`.
 
 **Warning:** this is an analysis tool, **not financial advice**. Leveraged futures trading can lose all your capital; backtests do not predict the future. You, the buyer/publisher, are responsible for the licences and registrations required where you operate, for your marketing claims, and for complying with Google Play and Binance terms. The privacy policy and terms pages are templates: have a lawyer review them. See `LICENSE.md` and `docs/SUPPORT.md`.
