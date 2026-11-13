@@ -5,21 +5,19 @@ const { chromium } = require("playwright");
 const fs = require("fs");
 const path = require("path");
 const OUT = "play-assets";
-const svg = fs.readFileSync("icon.svg", "utf8");
-const logo = fs.readFileSync("icons/etek-logo.png").toString("base64");
+const svg = fs.readFileSync("icons/solpha/icon.svg", "utf8"); // thương hiệu SOLPHA (bản Play không dùng nhận diện ETEK)
 const b64 = (s) => Buffer.from(s).toString("base64");
-const feature = `<!doctype html><html><body style="margin:0;width:1024px;height:500px;background:#189848;font-family:Roboto,Segoe UI,sans-serif;color:#fff;position:relative;overflow:hidden">
-  <div style="position:absolute;right:-120px;top:-160px;width:520px;height:520px;border-radius:50%;background:#0e2e1c;opacity:.35"></div>
-  <div style="position:absolute;left:-80px;bottom:-220px;width:420px;height:420px;border-radius:50%;background:#0e2e1c;opacity:.25"></div>
-  <img src="data:image/svg+xml;base64,${b64(svg)}" style="position:absolute;left:64px;top:110px;width:200px;height:200px;border-radius:44px;box-shadow:0 12px 40px rgba(0,0,0,.25)">
-  <div style="position:absolute;left:300px;top:118px">
-    <div style="font-size:58px;font-weight:900;letter-spacing:.06em;line-height:1">SOLPHA</div>
-    <div style="font-size:26px;font-weight:600;margin-top:10px;opacity:.95">Futures Desk · SOL · BTC · ETH · DOGE</div>
-    <div style="font-size:19px;margin-top:22px;line-height:1.5;opacity:.92;max-width:640px">Tín hiệu nến 5M theo xu hướng 1D/4H/1H · kế hoạch vào lệnh, SL, TP, khối lượng · giá realtime Binance Futures · backtest 30 ngày</div>
+const feature = `<!doctype html><html><body style="margin:0;width:1024px;height:500px;background:#07080c;font-family:Roboto,Segoe UI,sans-serif;color:#e8edf7;position:relative;overflow:hidden">
+  <div style="position:absolute;inset:0;background:radial-gradient(620px 340px at 8% -10%,rgba(62,203,255,.28),transparent 62%),radial-gradient(560px 320px at 96% 10%,rgba(155,92,255,.30),transparent 58%),radial-gradient(520px 260px at 70% 112%,rgba(198,255,58,.12),transparent 55%)"></div>
+  <img src="data:image/svg+xml;base64,${b64(svg)}" style="position:absolute;left:64px;top:110px;width:200px;height:200px;border-radius:44px;box-shadow:0 14px 48px rgba(62,203,255,.22)">
+  <div style="position:absolute;left:300px;top:112px">
+    <div style="font-size:60px;font-weight:900;letter-spacing:.08em;line-height:1;background:linear-gradient(90deg,#3ecbff,#9b5cff);-webkit-background-clip:text;color:transparent">SOLPHA</div>
+    <div style="font-size:26px;font-weight:600;margin-top:12px;color:#e8edf7">Futures Desk · SOL · BTC · ETH · DOGE</div>
+    <div style="font-size:19px;margin-top:22px;line-height:1.5;color:#8b95a8;max-width:640px">Chỉ báo đa khung 5M → 1D, kế hoạch tham khảo theo quy tắc kỹ thuật, giá realtime Binance Futures, backtest 30 ngày trên máy bạn</div>
   </div>
-  <div style="position:absolute;right:36px;bottom:26px;background:#fff;border-radius:12px;padding:8px 14px"><img src="data:image/png;base64,${logo}" style="height:34px;display:block"></div>
+  <div style="position:absolute;left:64px;bottom:22px;font-size:12px;color:#8b95a8">Công cụ phân tích kỹ thuật — không phải tư vấn đầu tư. Giao dịch futures có thể mất toàn bộ vốn.</div>
 </body></html>`;
-const icon = `<!doctype html><html><body style="margin:0;background:#189848"><img src="data:image/svg+xml;base64,${b64(svg)}" width="512" height="512" style="display:block"></body></html>`;
+const icon = `<!doctype html><html><body style="margin:0;background:#0b0d12"><img src="data:image/svg+xml;base64,${b64(svg)}" width="512" height="512" style="display:block"></body></html>`;
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
   const b = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});

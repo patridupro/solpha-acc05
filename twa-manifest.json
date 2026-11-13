@@ -4,17 +4,17 @@
   "name": "SOLPHA · Futures Desk",
   "launcherName": "SOLPHA",
   "display": "standalone",
-  "themeColor": "#189848",
-  "themeColorDark": "#189848",
-  "navigationColor": "#189848",
-  "navigationColorDark": "#189848",
-  "navigationDividerColor": "#189848",
-  "navigationDividerColorDark": "#189848",
-  "backgroundColor": "#FFFFFF",
+  "themeColor": "#07080c",
+  "themeColorDark": "#07080c",
+  "navigationColor": "#07080c",
+  "navigationColorDark": "#07080c",
+  "navigationDividerColor": "#07080c",
+  "navigationDividerColorDark": "#07080c",
+  "backgroundColor": "#07080C",
   "enableNotifications": true,
   "startUrl": "/?source=play",
-  "iconUrl": "https://solpha.pages.dev/icons/icon-512.png",
-  "maskableIconUrl": "https://solpha.pages.dev/icons/maskable-512.png",
+  "iconUrl": "https://solpha.pages.dev/icons/solpha/icon-512.png",
+  "maskableIconUrl": "https://solpha.pages.dev/icons/solpha/maskable-512.png",
   "splashScreenFadeOutDuration": 300,
   "signingKey": {
     "path": "./android.keystore",
@@ -23,10 +23,10 @@
   "appVersionName": "1.0.0",
   "appVersionCode": 1,
   "shortcuts": [
-    { "name": "Quét ngay", "shortName": "Quét", "url": "/?scan=1", "chosenIconUrl": "https://solpha.pages.dev/icons/icon-192.png" }
+    { "name": "Quét ngay", "shortName": "Quét", "url": "/?scan=1", "chosenIconUrl": "https://solpha.pages.dev/icons/solpha/icon-192.png" }
   ],
   "generatorApp": "bubblewrap-cli",
-  "webManifestUrl": "https://solpha.pages.dev/manifest.webmanifest",
+  "webManifestUrl": "https://solpha.pages.dev/manifest-solpha.webmanifest",
   "fallbackType": "customtabs",
   "features": {
     "playBilling": { "enabled": false }
