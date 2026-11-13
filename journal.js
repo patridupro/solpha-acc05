@@ -3,11 +3,11 @@
 (function () {
   const KEY = "solpha_journal";
   const CRITERIA = [
-    { id: "kyluat", w: 30, name: "Kỷ luật theo chỉ báo", hint: "Chỉ vào khi app đủ điều kiện; đứng ngoài khi WAIT." },
-    { id: "setup", w: 25, name: "Setup đúng", hint: "Đồng pha 1D/4H/1H, chạm BB / nến tín hiệu đạt." },
-    { id: "ruiro", w: 20, name: "Quản trị rủi ro", hint: "Đặt SL trước khi vào; mỗi lệnh rủi ro ≤ 1–2% tài khoản." },
-    { id: "chianho", w: 15, name: "Chia nhỏ lệnh", hint: "Vào 2–3 phần tại vùng setup tốt, không all-in một giá." },
-    { id: "tamly", w: 10, name: "Không FOMO / gỡ / chase", hint: "Không vào vì sợ lỡ, không gỡ lỗ, không đuổi BB trên." }
+    { id: "kyluat", w: 30, name: "Kỷ luật theo chỉ báo", hint: "Chỉ ghi nhận khi app đủ điều kiện; chỉ quan sát khi WAIT." },
+    { id: "setup", w: 25, name: "Setup đúng", hint: "Đồng pha 1D/4H/1H, chạm BB / nến khớp điều kiện." },
+    { id: "ruiro", w: 20, name: "Quản trị rủi ro", hint: "Xác định mức vô hiệu kịch bản trước khi ghi nhận; rủi ro mỗi kịch bản ≤ 1–2% tài khoản." },
+    { id: "chianho", w: 15, name: "Kỷ luật chia phần", hint: "Chia 2–3 phần tại vùng tham chiếu, không dồn một mức." },
+    { id: "tamly", w: 10, name: "Không FOMO / gỡ / đuổi giá", hint: "Không ghi nhận vì sợ lỡ, không gỡ sau kết quả xấu, không đuổi BB trên." }
   ];
   const NA_WHEN_IDLE = ["setup", "ruiro", "chianho"];
   const $ = (id) => document.getElementById(id);
@@ -85,8 +85,8 @@
     const tag = `${d}/${m}/${y}`;
     const hits = logs.filter((l) => l.alert && String(l.t).includes(tag));
     $("jSignals").innerHTML = hits.length
-      ? `App báo ${hits.length} tín hiệu ngày này:<br>` + hits.slice(0, 6).map((h) => `• ${esc(h.t)} — ${esc(h.text)}`).join("<br>")
-      : "App không ghi nhận tín hiệu nào ngày này (nhật ký app chỉ lưu khi app đang mở). Không có tín hiệu mà vẫn vào lệnh = trừ điểm Kỷ luật.";
+      ? `App ghi nhận ${hits.length} lần khớp điều kiện ngày này:<br>` + hits.slice(0, 6).map((h) => `• ${esc(h.t)} — ${esc(h.text)}`).join("<br>")
+      : "App không ghi nhận lần khớp điều kiện nào ngày này (nhật ký app chỉ lưu khi app đang mở). Không khớp điều kiện mà vẫn ghi nhận thao tác = trừ điểm Kỷ luật.";
   }
 
   function renderMonth() {
@@ -103,9 +103,9 @@
       <div><span>Ngày ghi</span><b>${days.length}</b></div>
       <div><span>Điểm TB</span><b>${avg ?? "—"} ${avg != null ? "(" + grade(avg) + ")" : ""}</b></div>
       <div><span>Ngày hạng A</span><b>${scores.filter((s) => s >= 85).length}</b></div>
-      <div><span>Đứng ngoài</span><b>${idle}</b></div>
+      <div><span>Chỉ quan sát</span><b>${idle}</b></div>
       <div><span>Chuỗi kỷ luật dài nhất</span><b>${best} ngày</b></div>
-      <div><span>Tổng PnL</span><b class="${pnl >= 0 ? "up" : "down"}">${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}</b></div>`;
+      <div><span>Tổng kết quả ghi nhận</span><b class="${pnl >= 0 ? "up" : "down"}">${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}</b></div>`;
     $("jCritBody").innerHTML = CRITERIA.map((c) => {
       const appl = days.filter((d) => ["yes", "no"].includes(db[d].c?.[c.id]));
       const ok = appl.filter((d) => db[d].c[c.id] === "yes").length;
@@ -115,7 +115,7 @@
     $("jDays").innerHTML = days.length ? days.slice().reverse().map((d) => {
       const e = db[d], s = score(e);
       const marks = CRITERIA.map((c) => (e.c?.[c.id] === "yes" ? "✅" : e.c?.[c.id] === "no" ? "❌" : "·")).join("");
-      return `<tr data-day="${d}"><td>${d.slice(8)}/${d.slice(5, 7)}</td><td>${e.mode === "idle" ? "Đứng ngoài" : (e.trades || 0) + " lệnh"}</td><td>${marks}</td><td><b>${s ?? "—"}</b> ${grade(s)}</td><td>${e.pnl ?? ""}</td><td class="muted">${esc(e.note).slice(0, 60)}</td></tr>`;
+      return `<tr data-day="${d}"><td>${d.slice(8)}/${d.slice(5, 7)}</td><td>${e.mode === "idle" ? "Chỉ quan sát" : (e.trades || 0) + " lần"}</td><td>${marks}</td><td><b>${s ?? "—"}</b> ${grade(s)}</td><td>${e.pnl ?? ""}</td><td class="muted">${esc(e.note).slice(0, 60)}</td></tr>`;
     }).join("") : `<tr><td colspan="6" class="muted">Chưa có nhật ký tháng này.</td></tr>`;
   }
 
@@ -128,10 +128,10 @@
   function exportCSV() {
     const month = $("jMonth").value || today().slice(0, 7);
     const db = load();
-    const head = ["Ngay", "CheDo", "SoLenh", ...CRITERIA.map((c) => `${c.name} (${c.w})`), "Diem", "Hang", "PnL", "GhiChu"];
+    const head = ["Ngay", "CheDo", "SoLanXuatHien", ...CRITERIA.map((c) => `${c.name} (${c.w})`), "Diem", "Hang", "KetQuaGhiNhan", "GhiChu"];
     const rows = Object.keys(db).filter((d) => d.startsWith(month)).sort().map((d) => {
       const e = db[d], s = score(e);
-      return [d, e.mode === "idle" ? "Dung ngoai" : "Vao lenh", e.trades || 0, ...CRITERIA.map((c) => ({ yes: "Dat", no: "Khong" }[e.c?.[c.id]] || "N/A")), s ?? "", grade(s), e.pnl ?? "", (e.note || "").replace(/"/g, '""')];
+      return [d, e.mode === "idle" ? "ChiQuanSat" : "PhienThaoTac", e.trades || 0, ...CRITERIA.map((c) => ({ yes: "Dat", no: "Khong" }[e.c?.[c.id]] || "N/A")), s ?? "", grade(s), e.pnl ?? "", (e.note || "").replace(/"/g, '""')];
     });
     const csv = "﻿" + [head, ...rows].map((r) => r.map((x) => `"${x}"`).join(",")).join("\n");
     download(`solpha-nhat-ky-${month}.csv`, csv, "text/csv");
@@ -151,7 +151,7 @@
     $("jSave").addEventListener("click", () => {
       const date = $("jDate").value || today();
       const entry = readForm();
-      if (Number.isNaN(entry.pnl)) { $("jSaved").textContent = "PnL không hợp lệ — chỉ nhập số, ví dụ -1.5"; $("jPnl").focus(); return; }
+      if (Number.isNaN(entry.pnl)) { $("jSaved").textContent = "Kết quả ghi nhận không hợp lệ — chỉ nhập số, ví dụ -1.5"; $("jPnl").focus(); return; }
       const db = load(); db[date] = entry;
       $("jSaved").textContent = save(db) ? `Đã lưu ${date} · ${score(db[date]) ?? "—"} điểm (${grade(score(db[date]))})` : "Không lưu được (trình duyệt chặn bộ nhớ)";
       if (date.startsWith($("jMonth").value)) renderMonth();
