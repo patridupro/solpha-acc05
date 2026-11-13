@@ -104,7 +104,7 @@
   // Giá ở dải ngoài khung lớn: chỉ cho vào nếu MỌI khung đang ở dải ngoài đều "bám dải" (xu hướng mạnh thật), ½ khối lượng.
   function chaseCheck(chase, dir, htf, o) {
     const band = dir === "long" ? "BB trên" : "BB dưới";
-    if (!o.allowBandWalk) return { ok: false, why: `đang chase ${band} (${chase.join(",")})` };
+    if (!o.allowBandWalk) return { ok: false, why: `giá kéo giãn ở ${band} (${chase.join(",")})` };
     const walks = { "1H": dir === "long" ? htf.walkLong : htf.walkShort, "4H": dir === "long" ? htf.walk4hLong : htf.walk4hShort, "1D": dir === "long" ? htf.walk1dLong : htf.walk1dShort };
     for (const tf of chase) {
       const w = walks[tf];
@@ -183,7 +183,7 @@
     const entry = (e1 + e2 + e3) / 3;
     const sl = dir === "long" ? k.l - o.slATR * atr : k.h + o.slATR * atr;
     const risk = Math.abs(entry - sl);
-    if (risk > o.maxRiskATR * atr) { res.why.push(`SL quá xa (${(risk / atr).toFixed(1)}×ATR)`); return res; }
+    if (risk > o.maxRiskATR * atr) { res.why.push(`mức vô hiệu quá xa (${(risk / atr).toFixed(1)}×ATR)`); return res; }
     const tp1 = entry + sgn * o.tp1R * risk;
     let tp2 = entry + sgn * o.tp2R * risk;
     // BB 1H là vùng cản: nếu nằm giữa TP1 và 3R thì chốt TP2 sớm tại đó.
@@ -215,13 +215,13 @@
       }
       corrective = true;
     }
-    if (o.shortRegime === "trend" && corrective) return no("chỉ đo short thuận xu hướng");
-    if (o.shortRegime === "corrective" && !corrective) return no("chỉ đo short điều chỉnh");
+    if (o.shortRegime === "trend" && corrective) return no("chỉ đo cấu trúc giảm thuận xu hướng");
+    if (o.shortRegime === "corrective" && !corrective) return no("chỉ đo cấu trúc giảm điều chỉnh");
     res.corrective = corrective;
     if (htf.m15Down === false) return no("15M chưa giảm");
     if (htf.h1Close != null && htf.h1Ema21 != null && htf.h1Close >= htf.h1Ema21) return no("giá 1H còn trên EMA21");
     // Bộ lọc riêng của Short
-    if (htf.funding != null && htf.funding <= o.fundingMin) return no(`funding ${(htf.funding * 100).toFixed(3)}% quá âm (dễ bị ép short)`);
+    if (htf.funding != null && htf.funding <= o.fundingMin) return no(`funding ${(htf.funding * 100).toFixed(3)}% quá âm (dễ bị ép giá ngược)`);
     if (htf.h1Rsi != null && htf.h1Rsi < o.sH1RsiMin) return no(`RSI 1H ${htf.h1Rsi.toFixed(0)} < ${o.sH1RsiMin} (quá bán)`);
     for (let j = i - 3; j < i; j++) { const x = P.candles[j], a = P.atr[j - 1]; if (a && x.h - x.l > o.sCrashATR * a) return no("vừa có cú sập lớn, chờ hồi"); } // so với ATR trước nến sập
     const chase = htf.chaseDown || [];
@@ -261,7 +261,7 @@
       if (htf.h1Lower && htf.h1Lower < tp1 && htf.h1Lower > tp2) { tp2 = htf.h1Lower; cap = "BB dưới 1H"; }
       if (corrective && htf.d1Lower != null) {
         // Điều chỉnh: BB dưới 1D là vùng đỡ của xu hướng tăng → TP2 không vượt quá; TP1 cũng phải trước nó.
-        if (tp1 <= htf.d1Lower) { return no(`TP1 vượt BB dưới 1D (${htf.d1Lower.toFixed(2)})`); }
+        if (tp1 <= htf.d1Lower) { return no(`mức tham chiếu 1 vượt BB dưới 1D (${htf.d1Lower.toFixed(2)})`); }
         if (tp2 < htf.d1Lower) { tp2 = htf.d1Lower; cap = "BB dưới 1D"; }
       }
       // Vùng đỡ nằm sát ngay sau TP1 (TP2 cách TP1 < 0.5R) → không có TP2 thật: chốt hết ở TP1.
@@ -273,7 +273,7 @@
         sizeFactor: setup === "S2" || res.momentum || corrective ? o.walkSize : 1, timeStopBars: o.sTimeStopBars, partialTP1: tp2Merged ? 0 : 0.5, corrective, tp2Merged };
       return res;
     }
-    return no(`SL quá xa (${lastRisk.toFixed(1)}×ATR)`);
+    return no(`mức vô hiệu quá xa (${lastRisk.toFixed(1)}×ATR)`);
     return res;
   }
 
@@ -328,7 +328,7 @@
     let e3 = e2 - sgn * 0.25 * atr;
     if (sgn * (e3 - sl) <= 0) e3 = (e2 + sl) / 2;
     const entry = (e1 + e2 + e3) / 3, risk = sgn * (entry - sl);
-    if (risk <= 0 || risk > o.m4hMaxRiskATR * atr) return no(`SL quá xa (${(risk / atr).toFixed(1)}×ATR)`);
+    if (risk <= 0 || risk > o.m4hMaxRiskATR * atr) return no(`mức vô hiệu quá xa (${(risk / atr).toFixed(1)}×ATR)`);
     const tp1 = entry + sgn * o.tp1R * risk, tp2 = entry + sgn * o.tp2R * risk;
     res.side = htfSide; res.setup = "M4H";
     res.d1Against = htf.d1Dir && htf.d1Dir !== want;

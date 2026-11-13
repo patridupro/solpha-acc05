@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" />
-  <meta name="description" content="SOLPHA — theo dõi nhiều cặp futures (SOL, BTC, ETH…) đa khung, đồng pha + Bollinger, cảnh báo tín hiệu." />
+  <meta name="description" content="SOLPHA — bàn phân tích giáo dục futures đa khung (SOL, BTC, ETH…), đồng pha + Bollinger, nhật ký nghiên cứu." />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="SOLPHA" />
@@ -38,7 +38,7 @@
     </div>
     <img class="etek-logo" data-src="icons/etek-logo.png" alt="ETEK Power" width="139" height="30" />
   </header>
-  <nav class="pairbar" id="pairBar" aria-label="Cặp giao dịch"></nav>
+  <nav class="pairbar" id="pairBar" aria-label="Cặp theo dõi"></nav>
   <section class="addpanel hidden" id="addPanel">
     <div class="addrow">
       <input id="addInput" list="coinList" placeholder="Mã coin, ví dụ BNB" autocomplete="off" autocapitalize="characters" />
@@ -58,14 +58,14 @@
       </div>
       <div class="pline"><span id="lastPrice" class="price">—</span><span id="chg24" class="chg">24h —</span></div>
       <div id="actBox" class="act wait"><div class="act-h"><span class="act-side">Đang quét…</span></div></div>
-      <div class="act-note">Kế hoạch tham khảo theo quy tắc kỹ thuật — không phải khuyến nghị đầu tư.</div>
+      <div class="act-note">Chỉ mang tính giáo dục, không phải tư vấn tài chính. Kết quả quá khứ không đảm bảo tương lai.</div>
       <div id="trendStrip" class="tstrip"></div>
       <div id="rvBox" class="rvbox"></div>
       <div class="metaline">Mark <b id="markPrice">—</b> · Funding <b id="funding">—</b> · H <b id="high24">—</b> · L <b id="low24">—</b> · <span id="source">Binance Futures</span></div>
     </section>
     <section class="card" id="trigCard">
       <div class="section-head">
-        <h2>Nến tín hiệu</h2>
+        <h2>Nến khớp điều kiện</h2>
         <span class="pill dim">Nến đã đóng · 5M / 15M</span>
       </div>
       <p id="trigText" class="big">Đang quét…</p>
@@ -73,7 +73,7 @@
       <div id="missedBox" class="missedbox"></div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Khung</th><th>Mở → Đóng</th><th>Range</th><th>Volume</th><th>Vị trí đóng</th><th>Tín hiệu</th><th>Ghi chú</th></tr></thead>
+          <thead><tr><th>Khung</th><th>Mở → Đóng</th><th>Range</th><th>Volume</th><th>Vị trí đóng</th><th>Khớp điều kiện</th><th>Ghi chú</th></tr></thead>
           <tbody id="trigBody"></tbody>
         </table>
       </div>
@@ -96,6 +96,7 @@
         <p id="biasText" class="big">WAIT</p>
         <div id="planBox" class="plan"></div>
         <p id="nextScan" class="muted">Quét kế tiếp (15′): —</p>
+        <p class="edu-disclaimer">Chỉ mang tính giáo dục, không phải tư vấn tài chính. Kết quả quá khứ không đảm bảo tương lai.</p>
       </article>
     </section>
     <section class="card">
@@ -117,10 +118,11 @@
     </section>
     <section class="card order-card">
       <div class="section-head">
-        <h2>Lệnh tham khảo</h2>
-        <span class="pill dim">Không phải lệnh sàn</span>
+        <h2>Ghi chú kịch bản</h2>
+        <span class="pill dim">Chỉ mang tính giáo dục</span>
       </div>
       <pre id="orderBox" class="order">Đang tính setup…</pre>
+      <p class="edu-disclaimer">Chỉ mang tính giáo dục, không phải tư vấn tài chính. Kết quả quá khứ không đảm bảo tương lai.</p>
     </section>
       <section class="two one">
       <article class="card">
@@ -138,10 +140,11 @@
         <p class="muted">Các công cụ dưới đây đo trên <b>cặp đang chọn ở thanh trên cùng</b>, bằng dữ liệu Binance thật. Muốn đo cặp khác thì chọn tab cặp đó rồi quay lại đây.</p>
       <div class="jactions"><button id="btnBacktest" class="btn ghost">Backtest 5M (~5 ngày)</button></div>
       <div id="btBox" class="btbox"></div>
+      <p class="edu-disclaimer">Chỉ mang tính giáo dục, không phải tư vấn tài chính. Kết quả quá khứ không đảm bảo tương lai.</p>
       <div class="jactions"><button id="btnOptimize" class="btn primary">Tối ưu 30 ngày</button></div>
       <div id="optBox" class="btbox"></div>
       <div class="rp">
-        <h3 class="jh3">Soi lại thời điểm <span class="muted">— vì sao lúc đó có/không có tín hiệu</span></h3>
+        <h3 class="jh3">Soi lại thời điểm <span class="muted">— vì sao khớp hoặc không khớp điều kiện</span></h3>
         <div class="jactions"><input type="datetime-local" id="rpTime" /><button id="btnReplay" class="btn ghost">Soi lại 3 giờ</button></div>
         <div id="rpBox" class="btbox"></div>
       </div>
@@ -150,32 +153,32 @@
     <div class="view hidden" data-view="journal">
     <section class="card" id="journalCard">
       <div class="section-head">
-        <h2>Nhật ký giao dịch hằng ngày</h2>
+        <h2>Nhật ký nghiên cứu hằng ngày</h2>
         <span class="pill" id="jLive">Điểm: —</span>
       </div>
       <div class="jtop">
         <label>Ngày <input type="date" id="jDate" /></label>
         <label>Chế độ
           <select id="jMode">
-            <option value="trade">Có vào lệnh</option>
-            <option value="idle">Đứng ngoài (không vào lệnh)</option>
+            <option value="trade">Phiên có thao tác</option>
+            <option value="idle">Chỉ quan sát</option>
           </select>
         </label>
-        <label>Số lệnh <input type="number" id="jTrades" min="0" step="1" inputmode="numeric" placeholder="0" /></label>
-        <label>PnL ($ hoặc R)
-          <span class="pnlwrap"><button type="button" id="jPnlSign" class="btn ghost" aria-label="Đổi dấu lãi/lỗ">±</button><input type="text" id="jPnl" inputmode="decimal" autocomplete="off" placeholder="vd 12.5 hoặc -1" /></span>
+        <label>Số lần xuất hiện <input type="number" id="jTrades" min="0" step="1" inputmode="numeric" placeholder="0" /></label>
+        <label>Kết quả ghi nhận ($ hoặc R)
+          <span class="pnlwrap"><button type="button" id="jPnlSign" class="btn ghost" aria-label="Đổi dấu kết quả ghi nhận">±</button><input type="text" id="jPnl" inputmode="decimal" autocomplete="off" placeholder="vd 12.5 hoặc -1" /></span>
         </label>
       </div>
       <div id="jCriteria"></div>
       <label class="jnote">Bài học / ghi chú
-        <textarea id="jNote" rows="2" placeholder="Vì sao vào/không vào? Làm đúng/sai điều gì?"></textarea>
+        <textarea id="jNote" rows="2" placeholder="Vì sao ghi nhận hoặc chỉ quan sát? Làm đúng/sai điều gì?"></textarea>
       </label>
       <p id="jSignals" class="muted jsig"></p>
       <div class="jactions">
         <button id="jSave" class="btn primary">Lưu nhật ký</button>
         <span id="jSaved" class="muted"></span>
       </div>
-      <p class="muted jweights">Trọng số: Kỷ luật 30 · Setup 25 · Rủi ro 20 · Chia nhỏ lệnh 15 · Tâm lý 10. Điểm = tổng trọng số Đạt ÷ tổng trọng số áp dụng (bỏ N/A). Hạng A ≥ 85 · B ≥ 70 · C ≥ 50 · D &lt; 50. Đứng ngoài đúng lúc vẫn được điểm Kỷ luật.</p>
+      <p class="muted jweights">Trọng số: Kỷ luật 30 · Setup 25 · Rủi ro 20 · Kỷ luật chia phần 15 · Tâm lý 10. Điểm = tổng trọng số Đạt ÷ tổng trọng số áp dụng (bỏ N/A). Hạng A ≥ 85 · B ≥ 70 · C ≥ 50 · D &lt; 50. Chỉ quan sát đúng lúc vẫn được điểm Kỷ luật.</p>
     </section>
     <section class="card" id="monthCard">
       <div class="section-head">
@@ -192,7 +195,7 @@
       <h3 class="jh3">Checklist từng ngày <span class="muted">(Kỷ luật · Setup · Rủi ro · Chia nhỏ · Tâm lý — chạm để sửa)</span></h3>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Ngày</th><th>Lệnh</th><th>Checklist</th><th>Điểm</th><th>PnL</th><th>Ghi chú</th></tr></thead>
+          <thead><tr><th>Ngày</th><th>Hoạt động</th><th>Checklist</th><th>Điểm</th><th>Kết quả ghi nhận</th><th>Ghi chú</th></tr></thead>
           <tbody id="jDays"></tbody>
         </table>
       </div>
@@ -209,7 +212,7 @@
         <div class="section-head"><h2>Cài đặt chung</h2><span class="muted">Áp dụng cho mọi cặp</span></div>
         <div class="settings">
           <label>Vốn ($) <input type="number" id="inpAcct" min="0" step="10" inputmode="decimal" placeholder="vd 1000" /></label>
-          <label>Rủi ro mỗi lệnh (%) <input type="number" id="inpRisk" min="0.1" max="5" step="0.1" inputmode="decimal" /></label>
+          <label>Rủi ro mỗi kịch bản (%) <input type="number" id="inpRisk" min="0.1" max="5" step="0.1" inputmode="decimal" /></label>
           <label>Làm mới giá
             <select id="selPrice"><option value="5">5 giây</option><option value="10" selected>10 giây</option><option value="15">15 giây</option><option value="30">30 giây</option><option value="60">60 giây</option></select>
           </label>
@@ -220,25 +223,25 @@
         </div>
       </section>
       <section class="card">
-        <div class="section-head"><h2>Tín hiệu cho cặp</h2><span class="pill"><b id="setPair">SOL</b></span></div>
-        <p class="muted">Bật/tắt từng loại tín hiệu <b>riêng cho cặp đang chọn</b>: mỗi cặp có thể dùng bộ khác nhau (kết quả của Tối ưu 30 ngày cũng chỉ áp dụng cho cặp đó).</p>
+        <div class="section-head"><h2>Điều kiện cho cặp</h2><span class="pill"><b id="setPair">SOL</b></span></div>
+        <p class="muted">Bật/tắt từng cấu trúc <b>riêng cho cặp đang chọn</b>: mỗi cặp có thể dùng bộ khác nhau (kết quả của Tối ưu 30 ngày cũng chỉ áp dụng cho cặp đó).</p>
         <div class="settings">
           <div class="sgrp long">
-            <div class="sgrp-h">▲ LONG · mua khi 1D/4H/1H cùng tăng</div>
+            <div class="sgrp-h">▲ Cấu trúc tăng · khi 1D/4H/1H cùng tăng</div>
             <label><input type="checkbox" id="chkSetupA" /> <span class="code long">A</span> Pullback · hồi về BB giữa rồi bật lên</label>
             <label><input type="checkbox" id="chkSetupB" /> <span class="code long">B</span> Bứt phá sau nén · BB co hẹp rồi đóng vượt BB trên</label>
           </div>
           <div class="sgrp short">
-            <div class="sgrp-h">▼ SHORT · bán khi khung lớn giảm</div>
+            <div class="sgrp-h">▼ Cấu trúc giảm · khi khung lớn giảm</div>
             <label><input type="checkbox" id="chkSetupS1" /> <span class="code short">S1</span> Hồi bị từ chối · chạm EMA21/BB giữa rồi bị đạp xuống</label>
-            <label><input type="checkbox" id="chkSetupS2" /> <span class="code short">S2</span> Thủng đáy 12 nến (½ khối lượng)</label>
+            <label><input type="checkbox" id="chkSetupS2" /> <span class="code short">S2</span> Thủng đáy 12 nến (½ quy mô mô phỏng)</label>
             <label><input type="checkbox" id="chkSetupS3" /> <span class="code short">S3</span> 1H chạm BB trên thất bại</label>
-            <label><input type="checkbox" id="chkCorrective" /> <span class="code short">ĐC</span> Điều chỉnh · 1D còn tăng nhưng giá thủng BB giữa 1D (½)</label>
-            <label><input type="checkbox" id="chkM4H" /> <span class="code short">M4H</span> Momentum 4H/1H · 4H+1H giảm, 15M+5M cùng chạm BB dưới (½)</label>
+            <label><input type="checkbox" id="chkCorrective" /> <span class="code short">ĐC</span> Điều chỉnh · 1D còn tăng nhưng giá thủng BB giữa 1D (½ quy mô mô phỏng)</label>
+            <label><input type="checkbox" id="chkM4H" /> <span class="code short">M4H</span> Nghiên cứu đà giảm 4H/1H · 4H+1H giảm, 15M+5M cùng chạm BB dưới (½ quy mô mô phỏng)</label>
           </div>
           <div class="sgrp both">
-            <div class="sgrp-h">Bộ lọc chung (cả Long và Short)</div>
-            <label><input type="checkbox" id="chkWalk" /> Cho vào khi 1H/4H bám BB (½ khối lượng)</label>
+            <div class="sgrp-h">Bộ lọc chung (cấu trúc tăng và giảm)</div>
+            <label><input type="checkbox" id="chkWalk" /> Ghi nhận khi 1H/4H bám BB (½ quy mô mô phỏng)</label>
             <label><input type="checkbox" id="chkSession" /> Tránh giờ funding / tin Mỹ / thanh khoản thấp</label>
           </div>
         </div>
@@ -248,11 +251,11 @@
         <ol class="rules">
           <li>Đồng pha = 1D + 4H + 1H cùng hướng EMA9/21, 15M không ngược mạnh. 5M chỉ timing. *MACD(12,26,9) tính như Binance: MACD = DIF − DEA, theo nến đang chạy, làm mới 20 giây/lần — chỉ để tham khảo, không phải điều kiện.</li>
           <li>Cảnh báo chỉ khi đồng pha VÀ chạm BB trên ≥2 khung, trong đó có ≥1 khung 1H/4H/1D.</li>
-          <li>Long thuận trend: ưu tiên chạm lower. Không chase upper weekly/daily.</li>
-          <li>Short chỉ khi HTF đã bear. SL/TP viết tới 2 số thập phân.</li>
-          <li>SL = đáy (đỉnh) nến tín hiệu ∓ 0.5×ATR. Vào 3 phần: giá đóng / hồi 50% nến / BB mid. Bỏ lệnh nếu rủi ro &gt; 2×ATR. TP1 = 1.5R (dời SL về giá vào), TP2 = 3R hoặc BB 1H nếu xa hơn. Khối lượng = vốn × % rủi ro ÷ (giá vào TB − SL).</li>
-          <li>Nến tín hiệu 5M/15M (bộ mới, mặc định): ATR + volume + Setup A (pullback lấy lại BB mid) / Setup B (bứt phá sau nén) — chi tiết ở ô Nến tín hiệu.</li>
-          <li>Tự quản size/leverage. Futures có thể mất hết tài khoản.</li>
+          <li>Cấu trúc tăng thuận xu hướng: ưu tiên chạm lower. Không đuổi upper weekly/daily.</li>
+          <li>Cấu trúc giảm chỉ khi khung lớn đã giảm. Mức vô hiệu và mức tham chiếu viết tới 2 số thập phân.</li>
+          <li>Mức vô hiệu kịch bản = đáy (đỉnh) nến khớp điều kiện ∓ 0.5×ATR. 3 mức tham chiếu: giá đóng / hồi 50% nến / BB mid. Bỏ kịch bản nếu khoảng cách &gt; 2×ATR. Mức tham chiếu 1 = 1.5R (dời mức vô hiệu về mức trung bình), mức tham chiếu 2 = 3R hoặc BB 1H nếu xa hơn. Quy mô mô phỏng = vốn × % rủi ro ÷ (mức trung bình − mức vô hiệu).</li>
+          <li>Nến khớp điều kiện 5M/15M (bộ mới, mặc định): ATR + volume + cấu trúc tăng A (pullback lấy lại BB mid) / cấu trúc tăng B (bứt phá sau nén) — chi tiết ở ô Nến khớp điều kiện.</li>
+          <li>Quy mô chỉ là mô phỏng quản trị rủi ro. Hợp đồng tương lai có thể mất hết tài khoản.</li>
         </ol>
       </article>
     </div>
@@ -261,9 +264,9 @@
     <div class="modal-card">
       <h2 id="riskTitle">Trước khi dùng</h2>
       <ul>
-        <li>SOLPHA là <b>công cụ phân tích kỹ thuật</b>, không phải tư vấn đầu tư. Mức vào, SL, TP, khối lượng là <b>kế hoạch tham khảo</b> tính theo quy tắc kỹ thuật, không phải lời khuyên mua/bán.</li>
-        <li>Giao dịch futures dùng đòn bẩy, <b>có thể mất toàn bộ vốn</b>. Kết quả quá khứ và backtest không bảo đảm kết quả tương lai.</li>
-        <li>App không kết nối tài khoản sàn và không đặt lệnh. Mọi quyết định và kết quả là của bạn.</li>
+        <li>SOLPHA là <b>công cụ phân tích kỹ thuật mang tính giáo dục</b>, không phải tư vấn tài chính. Vùng tham chiếu, mức vô hiệu kịch bản và quy mô mô phỏng là <b>ghi chú kịch bản</b>, không phải lời khuyên mua/bán.</li>
+        <li>Hợp đồng tương lai dùng đòn bẩy, <b>có thể mất toàn bộ vốn</b>. Kết quả quá khứ và mô phỏng không bảo đảm kết quả tương lai.</li>
+        <li>App không kết nối tài khoản sàn và không gửi yêu cầu tới sàn. Mọi quyết định và kết quả là của bạn.</li>
         <li>Dành cho người từ 18 tuổi trở lên. Xem <a href="terms.html">Điều khoản</a> và <a href="privacy.html">Quyền riêng tư</a>.</li>
       </ul>
       <button id="btnRiskOk" class="btn primary">Tôi đã hiểu và đồng ý</button>
@@ -271,7 +274,7 @@
   </div>
   <footer>SOLPHA Desk · dữ liệu Binance public API · không phải tư vấn tài chính · <a href="privacy.html">Quyền riêng tư</a> · <a href="terms.html">Điều khoản</a></footer>
   <nav class="botnav" id="botNav" aria-label="Điều hướng">
-    <button data-view="signal" class="active"><span class="ic">📈</span>Tín hiệu</button>
+    <button data-view="signal" class="active"><span class="ic">📈</span>Khớp điều kiện</button>
     <button data-view="analysis"><span class="ic">📊</span>Phân tích</button>
     <button data-view="tools"><span class="ic">🧪</span>Công cụ</button>
     <button data-view="journal"><span class="ic">📝</span>Nhật ký</button>
