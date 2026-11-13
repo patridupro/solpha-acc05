@@ -6,7 +6,7 @@ Cách dùng: mỗi khối trong khung ``` bên dưới là chuỗi dán nguyên 
 
 > **Quyết định cần chốt trước khi dán mục "Gói Pro":** Play yêu cầu listing mô tả đúng những gì có trong bản đang phát hành (Metadata policy: không dùng metadata gây hiểu nhầm). Nếu bản 1.0.0 gửi duyệt **chưa** có Play Billing (hiện `twa-manifest.json` đặt `playBilling.enabled = false`), hãy dùng **Bản A (không có Pro)**. Khi bản có thanh toán lên Play thì chuyển sang **Bản B (có Pro)** cùng với cập nhật Data safety (xem `POLICY-ANSWERS.md`).
 
-Thương hiệu: SOLPHA độc lập. Không nhắc ETEK Power ở bất kỳ chỗ nào của listing, ảnh, icon, tên nhà phát triển.
+Thương hiệu: SOLPHA độc lập. Không nhắc thương hiệu hay công ty nào khác ở listing, ảnh, icon, tên nhà phát triển.
 
 ---
 
@@ -231,7 +231,7 @@ Cấm tuyệt đối trong tên, mô tả, ảnh, video, "Có gì mới", phản
 | nên mua, nên bán, hãy vào lệnh, khuyến nghị đầu tư | "kế hoạch tham khảo", "phép tính theo quy tắc" |
 | #1, tốt nhất, miễn phí (khi có Pro mà không nêu), giảm giá, hot | mô tả trung tính |
 | Binance trong tên app, logo Binance, ảnh có logo sàn | Chỉ nhắc "dữ liệu công khai của Binance" như nguồn dữ liệu, kèm câu "không liên kết với Binance" |
-| ETEK Power, logo ETEK | Không nhắc ở bất cứ đâu |
+| Tên/logo công ty hoặc thương hiệu khác ngoài SOLPHA | Không nhắc ở bất cứ đâu |
 | Viết hoa cả câu, nhiều dấu chấm than, emoji nhồi nhét | Viết thường bình thường; không emoji trong mô tả |
 | Đánh giá/ lời chứng thực ẩn danh | Không đưa vào mô tả (Metadata policy: không cho phép lời chứng thực ẩn danh trong mô tả) |
 

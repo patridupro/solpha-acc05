@@ -228,7 +228,7 @@ Nếu `bundletool` hiện thêm quyền nằm ngoài danh sách trên (ví dụ 
 
 1. Điền hết `[TÊN PHÁP NHÂN]`, `[EMAIL]`, `[WEBSITE]` trong `privacy.html`, `terms.html`; trong `LISTING.md` điền `[EMAIL]`, `[WEBSITE]`.
 2. `.well-known/assetlinks.json` còn `THAY_BANG_SHA256_CUA_KHOA_KY_TU_PLAY_CONSOLE`: điền đủ dấu vân tay của khoá app signing của Play (và khoá upload nếu cần) rồi mới thử bản cài từ Play.
-3. Màn hình đầu tiên của app hiện còn **logo ETEK Power** ở header (`index.html:37`), nằm trong cache (`sw.js:5`) và `icon.svg` có `aria-label` nhắc ETEK. Hồ sơ này yêu cầu SOLPHA độc lập: phải gỡ trước khi chụp ảnh và trước khi gửi duyệt (ngoài phạm vi thư mục `docs/play/`, chưa sửa).
+3. Màn hình đầu tiên của app hiện còn **logo thương hiệu khác** ở header (`index.html:37`), nằm trong cache (`sw.js:5`), và `icon.svg` có `aria-label` nhắc thương hiệu đó (chi tiết ở `REVIEW-RISKS.md` mục R0). Hồ sơ này yêu cầu SOLPHA độc lập: phải gỡ trước khi chụp ảnh và trước khi gửi duyệt (ngoài phạm vi thư mục `docs/play/`, chưa sửa).
 4. Chạy `bundletool` kiểm quyền (mục 8).
 5. Với bản Pro: cập nhật mục 1B, `privacy.html`, listing Bản B, bật `playBilling`.
 

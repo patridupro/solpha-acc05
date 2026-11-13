@@ -58,6 +58,7 @@
       </div>
       <div class="pline"><span id="lastPrice" class="price">—</span><span id="chg24" class="chg">24h —</span></div>
       <div id="actBox" class="act wait"><div class="act-h"><span class="act-side">Đang quét…</span></div></div>
+      <div class="act-note">Kế hoạch tham khảo theo quy tắc kỹ thuật — không phải khuyến nghị đầu tư.</div>
       <div id="trendStrip" class="tstrip"></div>
       <div id="rvBox" class="rvbox"></div>
       <div class="metaline">Mark <b id="markPrice">—</b> · Funding <b id="funding">—</b> · H <b id="high24">—</b> · L <b id="low24">—</b> · <span id="source">Binance Futures</span></div>
@@ -256,6 +257,18 @@
       </article>
     </div>
   </main>
+  <div id="riskModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="riskTitle">
+    <div class="modal-card">
+      <h2 id="riskTitle">Trước khi dùng</h2>
+      <ul>
+        <li>SOLPHA là <b>công cụ phân tích kỹ thuật</b>, không phải tư vấn đầu tư. Mức vào, SL, TP, khối lượng là <b>kế hoạch tham khảo</b> tính theo quy tắc kỹ thuật, không phải lời khuyên mua/bán.</li>
+        <li>Giao dịch futures dùng đòn bẩy, <b>có thể mất toàn bộ vốn</b>. Kết quả quá khứ và backtest không bảo đảm kết quả tương lai.</li>
+        <li>App không kết nối tài khoản sàn và không đặt lệnh. Mọi quyết định và kết quả là của bạn.</li>
+        <li>Dành cho người từ 18 tuổi trở lên. Xem <a href="terms.html">Điều khoản</a> và <a href="privacy.html">Quyền riêng tư</a>.</li>
+      </ul>
+      <button id="btnRiskOk" class="btn primary">Tôi đã hiểu và đồng ý</button>
+    </div>
+  </div>
   <footer>SOLPHA Desk · dữ liệu Binance public API · không phải tư vấn tài chính · <a href="privacy.html">Quyền riêng tư</a> · <a href="terms.html">Điều khoản</a></footer>
   <nav class="botnav" id="botNav" aria-label="Điều hướng">
     <button data-view="signal" class="active"><span class="ic">📈</span>Tín hiệu</button>

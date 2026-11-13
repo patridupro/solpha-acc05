@@ -572,7 +572,8 @@ function renderRV(st) {
 // ---- Ô HÀNH ĐỘNG: có tín hiệu → LONG/SHORT + giá vào, SL, TP, khối lượng; chưa có → CHỜ + đang thiếu gì ----
 function renderAction(sym) {
   const st = stOf(sym), box = $("actBox"); if (!box) return;
-  if (!st.map) { box.className = "act wait"; box.innerHTML = st.error ? `<div class="act-h"><span class="act-side">Mất kết nối dữ liệu</span><span class="act-sub">mạng chậm hoặc app vừa chạy nền · đang tự thử lại${retryCount ? " (lần " + retryCount + ")" : ""}…</span></div>` : `<div class="act-h"><span class="act-side">Đang quét…</span></div>`; return; }
+  if (!st.map) { box.className = "act wait"; const geo = /\b(451|403)\b/.test(st.error || "");
+    box.innerHTML = st.error ? `<div class="act-h"><span class="act-side">${geo ? "Binance không phục vụ mạng này" : "Mất kết nối dữ liệu"}</span><span class="act-sub">${geo ? "Binance chặn một số khu vực/IP (ví dụ Mỹ). Thử đổi mạng (4G/Wi-Fi khác) hoặc VPN, app sẽ tự thử lại" : "mạng chậm hoặc app vừa chạy nền · đang tự thử lại"}${retryCount ? " (lần " + retryCount + ")" : ""}…</span></div>` : `<div class="act-h"><span class="act-side">Đang quét…</span></div>`; return; }
   const live = st.trig && (st.trig.find((x) => x.side && x.key === "5m") || st.trig.find((x) => x.side && x.key === "15m") || st.trig.find((x) => x.side));
   const saved = live ? null : savedPlan(sym), x = live || (saved && saved.x), hm = hmVN;
   if (x) {
@@ -870,6 +871,14 @@ $("selPrice").value = store.get("solpha_price_sec", "10");
 $("selPrice").addEventListener("change", () => { store.set("solpha_price_sec", $("selPrice").value); schedulePrice(); });
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js", { scope: "./" }).catch(() => {});
 if ("Notification" in window && Notification.permission === "granted") setNotifyBtn("Cảnh báo đã bật", true);
+// Màn hình cảnh báo rủi ro lần đầu mở app (bắt buộc đồng ý mới dùng tiếp).
+(function riskGate() {
+  const m = $("riskModal"); if (!m) return;
+  let ok = false; try { ok = localStorage.getItem("solpha_risk_ack") === "1"; } catch (_) {}
+  if (ok) return;
+  m.classList.remove("hidden");
+  $("btnRiskOk").addEventListener("click", () => { try { localStorage.setItem("solpha_risk_ack", "1"); } catch (_) {} m.classList.add("hidden"); });
+})();
 renderLogs(); schedulePrice(); scheduleQuarter(); renderTabs(); refreshTickers(true); fullScan("boot"); wsConnect();
 // Quét ngay sau mỗi mốc 5 phút (+8s) để bắt từng nến 5M vừa đóng.
 (function scheduleWatch() {
