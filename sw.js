@@ -1,8 +1,10 @@
-const CACHE = "solpha-v39";
+const CACHE = "solpha-v40";
 const ASSETS = [
   "./", "./index.html", "./styles.css", "./signals.js", "./app.js", "./journal.js", "./manifest.webmanifest", "./icon.svg",
   "./icons/icon-192.png", "./icons/icon-512.png", "./icons/maskable-192.png", "./icons/maskable-512.png",
-  "./icons/apple-touch-icon.png", "./icons/favicon-32.png", "./icons/etek-logo.png"
+  "./icons/apple-touch-icon.png", "./icons/favicon-32.png",
+  "./brand.js", "./solpha-theme.css", "./manifest-solpha.webmanifest", "./icons/solpha/icon-192.png", "./icons/solpha/icon-512.png",
+  "./privacy.html", "./terms.html"
 ];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));

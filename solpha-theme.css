@@ -1,0 +1,153 @@
+/* Giao diện tối SOLPHA — chỉ áp dụng khi brand.js đặt html[data-brand="solpha"] (bản Google Play). Bản web thường không bị ảnh hưởng. */
+html[data-brand="solpha"] {
+  --bg: #07080c;
+  --card: #10131b;
+  --line: #1e2430;
+  --text: #e8edf7;
+  --muted: #8b95a8;
+  --brand: #3ecbff;
+  --brand-dark: #1a6d88;
+  --tint: #131a26;
+  --cyan: #3ecbff;
+  --violet: #9b5cff;
+  --lime: #c6ff3a;
+  --gold: #e2b84a;
+  --up: #3ee0a0;
+  --down: #ff5d73;
+  --warn: #ffb020;
+  --raise: #161b26;   /* ô/nút nổi nhẹ trên thẻ */
+  --soft: #1a202c;    /* nền chip/pill/thanh */
+  color-scheme: dark;
+}
+html[data-brand="solpha"],
+html[data-brand="solpha"] body { background: var(--bg); color: var(--text); font-family: "Segoe UI", Inter, Roboto, system-ui, sans-serif; }
+
+/* Nền hào quang + thương hiệu */
+html[data-brand="solpha"] .bg {
+  display: block; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(900px 420px at 10% -10%, rgba(62,203,255,.12), transparent 60%),
+    radial-gradient(700px 380px at 90% 0%, rgba(155,92,255,.12), transparent 55%),
+    radial-gradient(600px 300px at 70% 100%, rgba(198,255,58,.05), transparent 50%);
+}
+html[data-brand="solpha"] .etek-logo { display: none !important; }
+html[data-brand="solpha"] .logo { box-shadow: 0 0 24px rgba(62,203,255,.22); }
+html[data-brand="solpha"] .brand h1,
+html[data-brand="solpha"] .legal h1 {
+  background: linear-gradient(90deg, #3ecbff, #9b5cff); -webkit-background-clip: text; background-clip: text;
+  color: transparent; -webkit-text-fill-color: transparent;
+}
+html[data-brand="solpha"] .legal h1 { display: inline-block; }
+html[data-brand="solpha"] h2 { color: var(--text); }
+html[data-brand="solpha"] .legal h2 { color: var(--cyan); }
+
+/* Header, thanh cặp, điều hướng */
+html[data-brand="solpha"] .top { background: rgba(7,8,12,.92); border-bottom-color: var(--line); }
+html[data-brand="solpha"] .pairbar { background: rgba(7,8,12,.95); }
+html[data-brand="solpha"] .addpanel { background: var(--card); }
+html[data-brand="solpha"] .botnav { background: rgba(12,14,20,.97); border-top-color: var(--line); }
+html[data-brand="solpha"] .botnav button { color: var(--muted); }
+html[data-brand="solpha"] .botnav button.active { color: var(--cyan); }
+
+/* Thẻ */
+html[data-brand="solpha"] .card { background: linear-gradient(180deg, #12151e, var(--card)); border-color: var(--line); box-shadow: 0 1px 2px rgba(0,0,0,.4); }
+html[data-brand="solpha"] .status.ok { box-shadow: inset 0 0 0 1px rgba(62,224,160,.4); }
+html[data-brand="solpha"] .status.bad { box-shadow: inset 0 0 0 1px rgba(255,93,115,.4); }
+html[data-brand="solpha"] .status.warn { box-shadow: inset 0 0 0 1px rgba(255,176,32,.4); }
+html[data-brand="solpha"] #trigCard.trig-long { box-shadow: inset 0 0 0 1px rgba(62,224,160,.6); }
+html[data-brand="solpha"] #trigCard.trig-short { box-shadow: inset 0 0 0 1px rgba(255,93,115,.6); }
+
+/* Nút */
+html[data-brand="solpha"] .btn { background: var(--raise); color: var(--text); border-color: var(--line); }
+html[data-brand="solpha"] .btn.ghost { background: transparent; color: var(--cyan); border-color: rgba(62,203,255,.55); }
+html[data-brand="solpha"] .btn.primary { background: linear-gradient(135deg, #1a6d88, #5b2ea8); border-color: #3b5bb0; color: #fff; }
+html[data-brand="solpha"] .pnlwrap .btn { color: var(--text); }
+
+/* Pill / tag */
+html[data-brand="solpha"] .pill { background: rgba(62,203,255,.12); color: var(--cyan); }
+html[data-brand="solpha"] .pill.dim { background: var(--soft); color: var(--muted); }
+html[data-brand="solpha"] .tag.tang { background: rgba(62,224,160,.14); color: var(--up); }
+html[data-brand="solpha"] .tag.giam { background: rgba(255,93,115,.14); color: var(--down); }
+html[data-brand="solpha"] .tag.sideway,
+html[data-brand="solpha"] .tag.in { background: var(--soft); color: var(--muted); }
+html[data-brand="solpha"] .tag.upper { background: rgba(255,93,115,.16); color: var(--down); }
+html[data-brand="solpha"] .tag.lower { background: rgba(62,224,160,.16); color: var(--up); }
+html[data-brand="solpha"] .code { color: #07080c; }
+
+/* Bảng, log, lệnh */
+html[data-brand="solpha"] th,
+html[data-brand="solpha"] td { border-bottom-color: var(--line); }
+html[data-brand="solpha"] .log li,
+html[data-brand="solpha"] .missedbox .mrow { border-bottom-color: var(--line); }
+html[data-brand="solpha"] .rules { color: var(--text); }
+html[data-brand="solpha"] .order { color: var(--text); background: #0b0e15; border-color: var(--line); }
+html[data-brand="solpha"] tr.rphit td { background: rgba(255,93,115,.1); }
+html[data-brand="solpha"] .missedbox .mrow.miss { background: rgba(255,93,115,.1); }
+html[data-brand="solpha"] .bar { background: var(--soft); }
+html[data-brand="solpha"] .gtable tr.grp.long td { background: rgba(62,224,160,.1); color: var(--up); }
+html[data-brand="solpha"] .gtable tr.grp.short td { background: rgba(255,93,115,.1); color: var(--down); }
+html[data-brand="solpha"] .why.long { background: rgba(62,224,160,.07); }
+html[data-brand="solpha"] .why.short { background: rgba(255,93,115,.07); }
+html[data-brand="solpha"] .sgrp { background: transparent; }
+html[data-brand="solpha"] .sgrp.long { background: rgba(62,224,160,.05); }
+html[data-brand="solpha"] .sgrp.short { background: rgba(255,93,115,.05); }
+
+/* Input / select / textarea */
+html[data-brand="solpha"] select,
+html[data-brand="solpha"] input,
+html[data-brand="solpha"] textarea,
+html[data-brand="solpha"] #journalCard input,
+html[data-brand="solpha"] #journalCard select,
+html[data-brand="solpha"] #journalCard textarea,
+html[data-brand="solpha"] #jMonth,
+html[data-brand="solpha"] #rpTime,
+html[data-brand="solpha"] .settings input[type=number],
+html[data-brand="solpha"] .settings select,
+html[data-brand="solpha"] .addrow input { background: #0b0e15; color: var(--text); border-color: #2a3242; }
+html[data-brand="solpha"] input[type=checkbox],
+html[data-brand="solpha"] input[type=radio] { accent-color: var(--cyan); }
+html[data-brand="solpha"] input::placeholder,
+html[data-brand="solpha"] textarea::placeholder { color: #5d6678; }
+html[data-brand="solpha"] input:focus,
+html[data-brand="solpha"] select:focus,
+html[data-brand="solpha"] textarea:focus { outline: none; border-color: var(--cyan); box-shadow: 0 0 0 2px rgba(62,203,255,.2); }
+html[data-brand="solpha"] .seg input[value="yes"]:checked + span { background: rgba(62,224,160,.2); color: var(--up); }
+html[data-brand="solpha"] .seg input[value="no"]:checked + span { background: rgba(255,93,115,.2); color: var(--down); }
+html[data-brand="solpha"] .seg input[value="na"]:checked + span { background: var(--soft); color: var(--text); }
+
+/* Tab cặp */
+html[data-brand="solpha"] .ptab { background: var(--card); color: var(--text); border-color: var(--line); }
+html[data-brand="solpha"] .ptab.active { border-color: var(--cyan); background: linear-gradient(180deg, rgba(62,203,255,.16), rgba(155,92,255,.08)); box-shadow: 0 0 0 1px rgba(62,203,255,.5); }
+html[data-brand="solpha"] .ptab .pprice { color: var(--text); }
+html[data-brand="solpha"] .ptab.add { color: var(--cyan); }
+html[data-brand="solpha"] .pbadge.wait { background: var(--soft); color: var(--muted); }
+html[data-brand="solpha"] .pbadge.long { background: rgba(62,224,160,.2); color: var(--up); }
+html[data-brand="solpha"] .pbadge.short { background: rgba(255,93,115,.2); color: var(--down); }
+html[data-brand="solpha"] .pbadge.warn { background: rgba(255,176,32,.2); color: var(--warn); }
+html[data-brand="solpha"] .pchip { background: var(--card); border-color: var(--line); color: var(--text); }
+html[data-brand="solpha"] .pchip button { background: var(--soft); color: var(--muted); }
+
+/* Range / Volume */
+html[data-brand="solpha"] .rvbox { background: #0d111a; border-color: var(--line); }
+html[data-brand="solpha"] .rvbar { background: var(--soft); }
+
+/* Ô hành động + dải khung giờ */
+html[data-brand="solpha"] .act { background: var(--card); border-color: var(--line); }
+html[data-brand="solpha"] .act.long { border-color: var(--up); background: rgba(62,224,160,.08); }
+html[data-brand="solpha"] .act.short { border-color: var(--down); background: rgba(255,93,115,.08); }
+html[data-brand="solpha"] .act.warn { border-color: var(--warn); background: rgba(255,176,32,.07); }
+html[data-brand="solpha"] .act-grid > div { background: rgba(7,8,12,.55); border-color: var(--line); }
+html[data-brand="solpha"] .act-tag.new { background: var(--text); color: #07080c; }
+html[data-brand="solpha"] .act-tag.hold { background: transparent; color: var(--text); border-color: #2a3242; }
+html[data-brand="solpha"] .act-tag.tp { background: var(--up); color: #07080c; }
+html[data-brand="solpha"] .act-tag.late { background: var(--warn); color: #07080c; }
+html[data-brand="solpha"] .held.short { background: rgba(255,93,115,.1); }
+html[data-brand="solpha"] .held.long { background: rgba(62,224,160,.1); }
+html[data-brand="solpha"] .tchip { background: var(--card); border-color: var(--line); }
+html[data-brand="solpha"] .tchip.tang { background: rgba(62,224,160,.1); border-color: rgba(62,224,160,.4); }
+html[data-brand="solpha"] .tchip.giam { background: rgba(255,93,115,.1); border-color: rgba(255,93,115,.4); }
+
+/* Trang pháp lý */
+html[data-brand="solpha"] .legal .box { background: var(--tint); border-color: var(--line); }
+html[data-brand="solpha"] a { color: var(--cyan); }
+html[data-brand="solpha"] footer a { color: var(--cyan); }
