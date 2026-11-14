@@ -468,7 +468,7 @@ function nextHourLabel() {
 async function notify(title, body, tag = "solpha-alert") {
   if (!("Notification" in window)) return "Thiết bị không hỗ trợ thông báo";
   if (Notification.permission !== "granted") return "Quyền thông báo: " + Notification.permission;
-  const opts = { body, icon: (window.SOLPHA_BRAND && window.SOLPHA_BRAND.icon192) || "icons/icon-192.png", badge: (window.SOLPHA_BRAND && window.SOLPHA_BRAND.icon192) || "icons/icon-192.png", tag, renotify: true, vibrate: [300, 150, 300, 150, 300], requireInteraction: true };
+  const opts = { body, icon: (window.SOLPHA_BRAND && window.SOLPHA_BRAND.icon192) || "icons/icon-192.png", badge: (window.SOLPHA_BRAND && window.SOLPHA_BRAND.icon192) || "icons/icon-192.png", tag, renotify: true, vibrate: [300, 150, 300, 150, 300], requireInteraction: true, data: { brand: (window.SOLPHA_BRAND && window.SOLPHA_BRAND.id) || "etek" } };
   if ($("chkSound").checked) beep();
   // Chrome Android không cho dùng new Notification() — bắt buộc đi qua service worker.
   try {

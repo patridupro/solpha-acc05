@@ -7,6 +7,8 @@
     var q = new URLSearchParams(location.search);
     fromUrl = q.get("source") === "play" || q.get("brand") === "solpha" || String(document.referrer || "").indexOf("android-app://") === 0;
   } catch (e) {}
+  // Trang pháp lý chỉ có nội dung SOLPHA: luôn dùng giao diện SOLPHA (URL dán lên Play Console không cần kèm tham số).
+  try { if (/\/(privacy|terms)(\.html)?\/?$/.test(location.pathname)) fromUrl = true; } catch (e) {}
   if (fromUrl) {
     brand = "solpha";
     try { sessionStorage.setItem(KEY, "solpha"); } catch (e) {} // sessionStorage: không lan sang Chrome/PWA ETEK cùng thiết bị

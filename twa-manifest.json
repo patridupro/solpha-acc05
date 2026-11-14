@@ -23,7 +23,7 @@
   "appVersionName": "1.0.0",
   "appVersionCode": 1,
   "shortcuts": [
-    { "name": "Quét ngay", "shortName": "Quét", "url": "/?scan=1", "chosenIconUrl": "https://solpha.pages.dev/icons/solpha/icon-192.png" }
+    { "name": "Quét ngay", "shortName": "Quét", "url": "/?scan=1&source=play", "chosenIconUrl": "https://solpha.pages.dev/icons/solpha/icon-192.png" }
   ],
   "generatorApp": "bubblewrap-cli",
   "webManifestUrl": "https://solpha.pages.dev/manifest-solpha.webmanifest",

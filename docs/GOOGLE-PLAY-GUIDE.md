@@ -39,7 +39,7 @@ App Android chỉ là "vỏ" mở đúng web app https://solpha.pages.dev toàn 
 
 **Cách nhanh — PWABuilder (trên trình duyệt):**
 1. Vào https://www.pwabuilder.com → nhập `https://solpha.pages.dev` → **Package for stores → Android**.
-2. Điền: Package ID `app.solpha.desk` (đúng như `twa-manifest.json`), App name `SOLPHA · Futures Desk`, Launcher name `SOLPHA`, Theme color `#189848`, Background `#FFFFFF`, Start URL `/?source=play`, bật **Notifications**, Signing key: **Create new** (lần đầu).
+2. Điền: Package ID `app.solpha.desk` (đúng như `twa-manifest.json`), App name `SOLPHA · Futures Desk`, Launcher name `SOLPHA`, Theme color `#07080c`, Background `#07080c` (thương hiệu SOLPHA), Start URL `/?source=play`, bật **Notifications**, Signing key: **Create new** (lần đầu).
 3. Tải về file zip. Trong zip có: `app-release-bundle.aab` (tải lên Play), `signing.keystore` + mật khẩu (**lưu kỹ, mất là không cập nhật app được nữa**), `assetlinks.json`.
 4. Mở `assetlinks.json` trong zip, copy chuỗi `sha256_cert_fingerprints` vào file `.well-known/assetlinks.json` của repo, commit, push. Kiểm tra: mở https://solpha.pages.dev/.well-known/assetlinks.json phải thấy đúng chuỗi.
 5. Khi Play Console bật **Play App Signing** (mặc định), Google ký lại app bằng khoá của Google. Vào Play Console → *Setup → App signing* → copy **SHA-256 certificate fingerprint** của *App signing key* và **thêm** vào mảng `sha256_cert_fingerprints` (giữ cả hai chuỗi). Thiếu bước này app cài từ Play sẽ hiện thanh địa chỉ.

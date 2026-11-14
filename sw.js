@@ -1,8 +1,8 @@
-const CACHE = "solpha-v41";
+const CACHE = "solpha-v42";
+// Chỉ nạp sẵn tệp trung tính + tệp thương hiệu SOLPHA. Tệp của bản web thường (icon.svg, manifest.webmanifest, icons/*.png)
+// KHÔNG nạp sẵn: chúng chỉ vào cache khi chính bản đó tải về (fetch handler bên dưới), nên máy dùng Play không lưu chúng.
 const ASSETS = [
-  "./", "./index.html", "./styles.css", "./signals.js", "./app.js", "./journal.js", "./manifest.webmanifest", "./icon.svg",
-  "./icons/icon-192.png", "./icons/icon-512.png", "./icons/maskable-192.png", "./icons/maskable-512.png",
-  "./icons/apple-touch-icon.png", "./icons/favicon-32.png",
+  "./", "./index.html", "./styles.css", "./signals.js", "./app.js", "./journal.js",
   "./brand.js", "./solpha-theme.css", "./manifest-solpha.webmanifest", "./icons/solpha/icon-192.png", "./icons/solpha/icon-512.png",
   "./privacy.html", "./terms.html"
 ];
@@ -34,7 +34,9 @@ self.addEventListener("notificationclick", (e) => {
   e.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
       const win = list.find((c) => "focus" in c);
-      return win ? win.focus() : self.clients.openWindow("./");
+      // Giữ đúng thương hiệu khi mở lại từ thông báo (bản Play cần source=play).
+      const play = e.notification.data && e.notification.data.brand === "solpha";
+      return win ? win.focus() : self.clients.openWindow(play ? "./?source=play" : "./");
     })
   );
 });
