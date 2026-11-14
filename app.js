@@ -156,7 +156,7 @@ async function diagnoseNet(errs) {
   if (navigator.onLine === false) return "offline";
   if (/\b(451|403)\b/.test(errs)) return "geo";
   let same = false;
-  try { const r = await fetch("./manifest-solpha.webmanifest?_probe=" + Date.now(), { method: "HEAD", cache: "no-store" }); same = r.ok; } catch (_) {} // HEAD không đi qua service worker → phản ánh mạng thật
+  try { const r = await fetch("./brand.js?_probe=" + Date.now(), { method: "HEAD", cache: "no-store" }); same = r.ok; } catch (_) {} // HEAD không đi qua service worker → phản ánh mạng thật
   if (!same) return navigator.onLine === false ? "offline" : "net";
   return /quá \d+ giây/.test(errs) && !/Failed to fetch|NetworkError|Load failed/i.test(errs) ? "slow" : "blocked";
 }

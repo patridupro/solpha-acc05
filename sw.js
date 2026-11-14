@@ -1,4 +1,4 @@
-const CACHE = "solpha-v43";
+const CACHE = "solpha-v44";
 // Chỉ nạp sẵn tệp trung tính + tệp thương hiệu SOLPHA. Tệp của bản web thường (icon.svg, manifest.webmanifest, icons/*.png)
 // KHÔNG nạp sẵn: chúng chỉ vào cache khi chính bản đó tải về (fetch handler bên dưới), nên máy dùng Play không lưu chúng.
 const ASSETS = [
