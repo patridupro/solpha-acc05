@@ -179,7 +179,7 @@ function friendlyErr(e) { const m = String((e && e.message) || e); return /Faile
 function netBoxHtml(raw) {
   const [title, sub] = netMsg(raw), wait = net.fails ? Math.max(0, Math.ceil((net.until - Date.now()) / 1000)) : 0;
   return `<div class="act-h"><span class="act-side">${title}</span><span class="act-sub">${sub}</span></div>
-    <div class="act-err"><span class="act-retry">${net.fails ? `Tự thử lại sau <b id="retryIn">${wait}</b>s · ` : ""}<button type="button" id="btnRetryNow" class="btn ghost sm">Thử lại ngay</button></span>
+    <div class="act-err"><span class="act-retry">${net.fails ? `<span>Tự thử lại sau <b id="retryIn">${wait}</b>s</span>` : ""}<button type="button" id="btnRetryNow" class="btn ghost sm">Thử lại ngay</button></span>
     <details class="tech"><summary>Chi tiết kỹ thuật</summary><pre>${esc(raw || net.errs || "—")}</pre></details></div>`;
 }
 function renderNetState() { const st = stOf(active); if (!st.map) renderPair(active); }

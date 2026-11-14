@@ -49,6 +49,8 @@ function mkEnv(over = {}) {
     ALLOWED_ORIGINS: ORIGIN,
     GOOGLE_SA_JSON: SA_JSON,
     RTDN_KEY: "rtdn-secret-key-0123456789abcdef0123456789",
+    // F8: TOKEN_ENC_KEY là BẮT BUỘC (>= 32 ký tự), tách khỏi RTDN_KEY.
+    TOKEN_ENC_KEY: "enc-secret-key-0123456789abcdef0123456789",
     ...over,
   };
 }
@@ -405,7 +407,7 @@ test("RTDN hợp lệ làm mới trạng thái theo token (huỷ/hết hạn)", 
   assert.ok(!logged.join("\n").includes(TOKEN));
 });
 
-test("RTDN: testNotification, token lạ, dữ liệu hỏng, lỗi Google đều trả 200", async () => {
+test("RTDN: testNotification, token lạ, dữ liệu hỏng vĩnh viễn -> 200; lỗi Google tạm thời -> 503 (Pub/Sub gửi lại)", async () => {
   const env = mkEnv();
   const k = env.RTDN_KEY;
   let r = await handleRtdn(rtdnReq(pubsub({ packageName: "app.solpha.desk", testNotification: { version: "1.0" } }), k), env);
@@ -413,9 +415,11 @@ test("RTDN: testNotification, token lạ, dữ liệu hỏng, lỗi Google đề
   assert.equal((await r.json()).test, true);
   assert.equal(google.gets, 0);
 
+  // F3: token lạ -> server tự hỏi Google (404 ở đây) rồi bỏ qua; không còn "ignored: unknown_token" mà không kiểm tra.
   r = await handleRtdn(rtdnReq(snote("token-chua-tung-verify-123"), k), env);
   assert.equal(r.status, 200);
-  assert.equal(google.gets, 0);
+  assert.equal((await r.json()).ignored, "invalid_token");
+  assert.equal(google.gets, 1);
 
   r = await handleRtdn(rtdnReq({ message: { data: "!!!không-phải-base64" } }, k), env);
   assert.equal(r.status, 200);
@@ -426,7 +430,7 @@ test("RTDN: testNotification, token lạ, dữ liệu hỏng, lỗi Google đề
   await worker.fetch(verifyReq({ deviceId: DEVICE, sku: SKU, purchaseToken: TOKEN }), env);
   google.failGet = true;
   r = await handleRtdn(rtdnReq(snote(TOKEN), k), env);
-  assert.equal(r.status, 200);
+  assert.equal(r.status, 503, "F1: lỗi Google tạm thời phải trả non-2xx để Pub/Sub gửi lại");
   assert.ok(logged.some((l) => l.includes("rtdn_error")));
 });
 

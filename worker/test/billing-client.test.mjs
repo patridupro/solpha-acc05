@@ -256,19 +256,25 @@ test("purchase thành công: verify rồi mới complete('success'), cập nhậ
   assert.ok(events.some((e) => e.detail.active === true && e.detail.source === "purchase"));
 });
 
-test("purchase: backend từ chối hoặc lỗi mạng -> complete('fail'), không cấp Pro", async () => {
+test("purchase: backend từ chối hẳn -> complete('fail'); lỗi mạng sau khi trả tiền -> KHÔNG fail, giữ token chờ xác minh", async () => {
   const a = twaEnv({ verifyReply: { active: false, state: "EXPIRED", expiryMs: 0, sku: null } });
   const r1 = await a.B.purchase("solpha_pro_monthly");
   assert.equal(r1.ok, false);
   assert.equal(r1.status, "verify_failed");
   assert.equal(a.state.completed, "fail");
   assert.equal(a.B.isPro(), false);
+  assert.equal(a.B.pending(), 0, "bị từ chối hẳn thì không giữ token");
 
+  // Hành vi cũ (complete('fail') + mất token) sai theo audit F3: Google đã tính tiền, backend chỉ tạm lỗi.
   const b = twaEnv({ verifyNetworkFail: true });
   const r2 = await b.B.purchase("solpha_pro_yearly");
-  assert.equal(r2.status, "verify_failed");
+  assert.equal(r2.ok, false);
+  assert.equal(r2.status, "pending_verification");
+  assert.equal(r2.pending, true);
   assert.equal(r2.network, true);
-  assert.equal(b.state.completed, "fail");
+  assert.equal(b.state.completed, "success", "không báo fail cho Play khi đã bị tính tiền");
+  assert.equal(b.B.pending(), 1);
+  assert.equal(b.B.isPro(), false, "chưa xác minh thì chưa cấp Pro");
 });
 
 test("purchase: người dùng huỷ -> status cancelled", async () => {

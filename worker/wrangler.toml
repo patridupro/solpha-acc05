@@ -12,6 +12,15 @@ PACKAGE_NAME = "app.solpha.desk"
 ALLOWED_ORIGINS = "https://solpha.pages.dev"
 # Danh sách SKU hợp lệ (mặc định đúng 2 SKU dưới đây)
 SKUS = "solpha_pro_monthly,solpha_pro_yearly"
+# Giao dịch của license tester (Play Console > License testing) chỉ được chấp nhận khi = "true".
+# Để "false" khi phát hành chính thức (mặc định an toàn); đổi thành "true" CHỈ trong giai đoạn thử nghiệm.
+ALLOW_TEST_PURCHASES = "false"
+# Id của khoá mã hoá hiện hành (nằm trong bản mã "v2.<id>.<...>"). Khi xoay TOKEN_ENC_KEY: đổi id này, đặt khoá mới,
+# và đưa khoá cũ vào secret TOKEN_ENC_KEYS_OLD dạng "k1:<khoá cũ>" (xem README).
+TOKEN_ENC_KEY_ID = "k1"
+# Xác thực RTDN bằng OIDC của Pub/Sub (khuyến nghị): bỏ comment và điền, khi đó ?key= không còn dùng.
+#RTDN_AUDIENCE = "https://solpha-billing.<subdomain>.workers.dev/api/rtdn"
+#PUSH_SA_EMAIL = "pubsub-push@<project>.iam.gserviceaccount.com"
 
 # KV lưu quyền lợi. Tạo bằng:  npx wrangler kv namespace create ENT
 # rồi dán id trả về vào dưới đây.
@@ -19,8 +28,19 @@ SKUS = "solpha_pro_monthly,solpha_pro_yearly"
 binding = "ENT"
 id = "THAY_BANG_ID_KV_NAMESPACE"
 
+# Giới hạn tốc độ chặt hơn bộ đếm trong bộ nhớ isolate (tuỳ chọn): bật Cloudflare Rate Limiting, tên binding
+# RL_VERIFY (verify/delete) và RL_ENTITLEMENT. Cú pháp thay đổi theo phiên bản wrangler; kiểm tra tài liệu hiện hành, ví dụ:
+#[[unsafe.bindings]]
+#name = "RL_VERIFY"
+#type = "ratelimit"
+#namespace_id = "1001"
+#simple = { limit = 10, period = 60 }
+
 # ---- BÍ MẬT (KHÔNG ghi giá trị vào file này) ----
 # Đặt bằng:  npx wrangler secret put <TEN>
 #   GOOGLE_SA_JSON  : toàn bộ nội dung file JSON khoá của service account Google Cloud
-#   RTDN_KEY        : chuỗi ngẫu nhiên dài (>= 32 ký tự) dùng trong ?key= của Pub/Sub push
-#   TOKEN_ENC_KEY   : (tuỳ chọn) khoá mã hoá purchaseToken khi lưu KV; bỏ trống thì dùng RTDN_KEY
+#   TOKEN_ENC_KEY   : BẮT BUỘC, >= 32 ký tự ngẫu nhiên; khoá mã hoá purchaseToken khi lưu KV.
+#                     Thiếu hoặc ngắn: /api/verify và /api/rtdn trả 500 (KHÔNG dùng RTDN_KEY thay thế).
+#   RTDN_KEY        : chuỗi ngẫu nhiên >= 32 ký tự dùng trong ?key= của Pub/Sub push (bỏ qua nếu dùng OIDC ở trên).
+#                     Ngắn hơn 32 ký tự: /api/rtdn từ chối (401).
+#   TOKEN_ENC_KEYS_OLD : (tuỳ chọn) khoá cũ khi xoay khoá, dạng "k1:<khoá>,k0:<khoá>"

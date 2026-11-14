@@ -460,7 +460,7 @@ async function addTokenToDevice(env, deviceId, hash, newRec, now = Date.now()) {
     if (!isActive(r.state, r.expiryMs, now)) return 1; // không còn quyền lợi
     return 2;
   };
-  let next = list.filter((h) => h === hash || score(h) > 0 || false);
+  const next = list.filter((h) => h === hash || score(h) > 0); // bỏ mục đã hết TTL / đã thuộc máy khác
   while (next.length > MAX_TOKENS_PER_DEVICE) {
     let idx = -1;
     let low = 3;
