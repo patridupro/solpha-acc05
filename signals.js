@@ -104,7 +104,7 @@
   // Giá ở dải ngoài khung lớn: chỉ cho vào nếu MỌI khung đang ở dải ngoài đều "bám dải" (xu hướng mạnh thật), ½ khối lượng.
   function chaseCheck(chase, dir, htf, o) {
     const band = dir === "long" ? "BB trên" : "BB dưới";
-    if (!o.allowBandWalk) return { ok: false, why: `đang chase ${band} (${chase.join(",")})` };
+    if (!o.allowBandWalk) return { ok: false, why: `giá đang kéo giãn sát ${band} (${chase.join(",")})` };
     const walks = { "1H": dir === "long" ? htf.walkLong : htf.walkShort, "4H": dir === "long" ? htf.walk4hLong : htf.walk4hShort, "1D": dir === "long" ? htf.walk1dLong : htf.walk1dShort };
     for (const tf of chase) {
       const w = walks[tf];
@@ -223,7 +223,7 @@
     // Bộ lọc riêng của Short
     if (htf.funding != null && htf.funding <= o.fundingMin) return no(`funding ${(htf.funding * 100).toFixed(3)}% quá âm (dễ bị ép short)`);
     if (htf.h1Rsi != null && htf.h1Rsi < o.sH1RsiMin) return no(`RSI 1H ${htf.h1Rsi.toFixed(0)} < ${o.sH1RsiMin} (quá bán)`);
-    for (let j = i - 3; j < i; j++) { const x = P.candles[j], a = P.atr[j - 1]; if (a && x.h - x.l > o.sCrashATR * a) return no("vừa có cú sập lớn, chờ hồi"); } // so với ATR trước nến sập
+    for (let j = i - 3; j < i; j++) { const x = P.candles[j], a = P.atr[j - 1]; if (a && x.h - x.l > o.sCrashATR * a) return no("vừa có cú sập lớn (nến quá lớn gần đây)"); } // so với ATR trước nến sập
     const chase = htf.chaseDown || [];
     if (chase.length) { const c = chaseCheck(chase, "short", htf, o); if (!c.ok) return no(c.why); }
     const h1AtLower = chase.length > 0; // đang bám dải 1H/4H → ½ khối lượng

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#189848" />
   <link rel="preload" href="fonts/roboto-latin-400.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/roboto-vietnamese-400.woff2" as="font" type="font/woff2" crossorigin />
-  <meta name="description" content="SOLPHA — theo dõi nhiều cặp futures (SOL, BTC, ETH…) đa khung, đồng pha + Bollinger, cảnh báo tín hiệu." />
+  <meta name="description" content="SOLPHA — theo dõi điều kiện kỹ thuật đa khung cho nhiều cặp futures (SOL, BTC, ETH…): đồng pha + Bollinger, kế hoạch tham khảo." />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="SOLPHA" />
@@ -86,13 +86,13 @@
         <p id="alignDetail" class="muted">Cần 1D + 4H + 1H cùng hướng, 15M không ngược mạnh.</p>
       </article>
       <article class="card status" id="alertCard">
-        <h2>Cảnh báo BB</h2>
+        <h2>Điều kiện BB</h2>
         <p id="alertText" class="big">—</p>
         <p id="alertDetail" class="muted">Chạm upper nếu %B ≥ 0.95 · lower nếu %B ≤ 0.05</p>
       </article>
       <article class="card status" id="planCard">
-        <h2>Ưu tiên</h2>
-        <p id="biasText" class="big">WAIT</p>
+        <h2>Trạng thái điều kiện</h2>
+        <p id="biasText" class="big">Chưa đủ điều kiện</p>
         <div id="planBox" class="plan"></div>
         <p id="nextScan" class="muted">Quét kế tiếp (15′): —</p>
       </article>
@@ -133,14 +133,14 @@
     </div>
     <div class="view hidden" data-view="tools">
       <section class="card" id="toolsCard">
-        <div class="section-head"><h2>Công cụ kiểm chứng</h2><span class="pill">Cặp: <b id="toolsPair">SOL</b></span></div>
-        <p class="muted">Các công cụ dưới đây đo trên <b>cặp đang chọn ở thanh trên cùng</b>, bằng dữ liệu Binance thật. Muốn đo cặp khác thì chọn tab cặp đó rồi quay lại đây.</p>
-      <div class="jactions"><button id="btnBacktest" class="btn ghost">Backtest 5M (~5 ngày)</button></div>
+        <div class="section-head"><h2>Công cụ mô phỏng</h2><span class="pill">Cặp: <b id="toolsPair">SOL</b></span></div>
+        <p class="muted">Các công cụ dưới đây đo trên <b>cặp đang chọn ở thanh trên cùng</b>, chạy mô phỏng trên dữ liệu giá công khai của Binance trong quá khứ. Muốn đo cặp khác thì chọn tab cặp đó rồi quay lại đây.</p>
+      <div class="jactions"><button id="btnBacktest" class="btn ghost">Backtest 5M (5 ngày gần nhất)</button></div>
       <div id="btBox" class="btbox"></div>
       <div class="jactions"><button id="btnOptimize" class="btn primary">Tối ưu 30 ngày</button></div>
       <div id="optBox" class="btbox"></div>
       <div class="rp">
-        <h3 class="jh3">Soi lại thời điểm <span class="muted">— vì sao lúc đó có/không có tín hiệu</span></h3>
+        <h3 class="jh3">Soi lại thời điểm <span class="muted">— vì sao lúc đó có/không có điều kiện kỹ thuật (từ 30 phút trước đến 3 giờ sau mốc chọn)</span></h3>
         <div class="jactions"><input type="datetime-local" id="rpTime" /><button id="btnReplay" class="btn ghost">Soi lại 3 giờ</button></div>
         <div id="rpBox" class="btbox"></div>
       </div>
@@ -174,7 +174,7 @@
         <button id="jSave" class="btn primary">Lưu nhật ký</button>
         <span id="jSaved" class="muted"></span>
       </div>
-      <p class="muted jweights">Trọng số: Kỷ luật 30 · Setup 25 · Rủi ro 20 · Chia nhỏ lệnh 15 · Tâm lý 10. Điểm = tổng trọng số Đạt ÷ tổng trọng số áp dụng (bỏ N/A). Hạng A ≥ 85 · B ≥ 70 · C ≥ 50 · D &lt; 50. Đứng ngoài đúng lúc vẫn được điểm Kỷ luật.</p>
+      <p class="muted jweights">Trọng số: Tuân thủ kế hoạch 30 · Setup 25 · Rủi ro 20 · Chia nhỏ lệnh 15 · Tâm lý 10. Điểm = tổng trọng số Đạt ÷ tổng trọng số áp dụng (bỏ N/A). Hạng A ≥ 85 · B ≥ 70 · C ≥ 50 · D &lt; 50. Đây là điểm tự đánh giá của bạn, không phải đánh giá của app; chọn “Đứng ngoài” khi bạn không vào lệnh.</p>
     </section>
     <section class="card" id="monthCard">
       <div class="section-head">
@@ -188,7 +188,7 @@
           <tbody id="jCritBody"></tbody>
         </table>
       </div>
-      <h3 class="jh3">Checklist từng ngày <span class="muted">(Kỷ luật · Setup · Rủi ro · Chia nhỏ · Tâm lý — chạm để sửa)</span></h3>
+      <h3 class="jh3">Checklist từng ngày <span class="muted">(Tuân thủ kế hoạch · Setup · Rủi ro · Chia nhỏ · Tâm lý — chạm để sửa)</span></h3>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Ngày</th><th>Lệnh</th><th>Checklist</th><th>Điểm</th><th>PnL</th><th>Ghi chú</th></tr></thead>
@@ -212,7 +212,7 @@
           <label>Làm mới giá
             <select id="selPrice"><option value="5">5 giây</option><option value="10" selected>10 giây</option><option value="15">15 giây</option><option value="30">30 giây</option><option value="60">60 giây</option></select>
           </label>
-          <label><input type="checkbox" id="chkSound" checked /> Âm báo khi cảnh báo</label>
+          <label><input type="checkbox" id="chkSound" checked /> Âm báo khi có thông báo</label>
           <label><input type="checkbox" id="chkWake" /> Giữ màn hình sáng khi mở app (để quét kịp mỗi 5 phút, tốn pin)</label>
           <div class="jactions"><button id="btnTestNotify" class="btn ghost">Gửi thông báo thử</button></div>
           <div id="notifyDiag" class="muted notifydiag"></div>
@@ -220,15 +220,15 @@
       </section>
       <section class="card">
         <div class="section-head"><h2>Tín hiệu cho cặp</h2><span class="pill"><b id="setPair">SOL</b></span></div>
-        <p class="muted">Bật/tắt từng loại tín hiệu <b>riêng cho cặp đang chọn</b>: mỗi cặp có thể dùng bộ khác nhau (kết quả của Tối ưu 30 ngày cũng chỉ áp dụng cho cặp đó).</p>
+        <p class="muted">Bật/tắt từng điều kiện tín hiệu <b>riêng cho cặp đang chọn</b>: mỗi cặp có thể dùng bộ khác nhau (kết quả của Tối ưu 30 ngày cũng chỉ áp dụng cho cặp đó).</p>
         <div class="settings">
           <div class="sgrp long">
-            <div class="sgrp-h">▲ LONG · mua khi 1D/4H/1H cùng tăng</div>
+            <div class="sgrp-h">▲ Điều kiện thuận xu hướng tăng (1D/4H/1H cùng tăng)</div>
             <label><input type="checkbox" id="chkSetupA" /> <span class="code long">A</span> Pullback · hồi về BB giữa rồi bật lên</label>
             <label><input type="checkbox" id="chkSetupB" /> <span class="code long">B</span> Bứt phá sau nén · BB co hẹp rồi đóng vượt BB trên</label>
           </div>
           <div class="sgrp short">
-            <div class="sgrp-h">▼ SHORT · bán khi khung lớn giảm</div>
+            <div class="sgrp-h">▼ Điều kiện thuận xu hướng giảm (khung lớn giảm)</div>
             <label><input type="checkbox" id="chkSetupS1" /> <span class="code short">S1</span> Hồi bị từ chối · chạm EMA21/BB giữa rồi bị đạp xuống</label>
             <label><input type="checkbox" id="chkSetupS2" /> <span class="code short">S2</span> Thủng đáy 12 nến (½ khối lượng)</label>
             <label><input type="checkbox" id="chkSetupS3" /> <span class="code short">S3</span> 1H chạm BB trên thất bại</label>
@@ -249,7 +249,7 @@
           <li>Cảnh báo chỉ khi đồng pha VÀ chạm BB trên ≥2 khung, trong đó có ≥1 khung 1H/4H/1D.</li>
           <li>Long thuận trend: ưu tiên chạm lower. Không chase upper weekly/daily.</li>
           <li>Short chỉ khi HTF đã bear. SL/TP viết tới 2 số thập phân.</li>
-          <li>SL = đáy (đỉnh) nến tín hiệu ∓ 0.5×ATR. Vào 3 phần: giá đóng / hồi 50% nến / BB mid. Bỏ lệnh nếu rủi ro &gt; 2×ATR. TP1 = 1.5R (dời SL về giá vào), TP2 = 3R hoặc BB 1H nếu xa hơn. Khối lượng = vốn × % rủi ro ÷ (giá vào TB − SL).</li>
+          <li>SL = đáy (đỉnh) nến tín hiệu ∓ 0.5×ATR. Vùng vào tham khảo 3 mức: giá đóng / hồi 50% nến / BB mid. Kế hoạch bị bỏ nếu rủi ro &gt; 2×ATR. TP1 = 1.5R (dời SL về giá vào), TP2 = 3R hoặc BB 1H nếu xa hơn. Khối lượng = vốn × % rủi ro ÷ (giá vào TB − SL).</li>
           <li>Nến tín hiệu 5M/15M (bộ mới, mặc định): ATR + volume + Setup A (pullback lấy lại BB mid) / Setup B (bứt phá sau nén) — chi tiết ở ô Nến tín hiệu.</li>
           <li>Tự quản size/leverage. Futures có thể mất hết tài khoản.</li>
         </ol>

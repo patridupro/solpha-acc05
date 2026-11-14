@@ -1,6 +1,6 @@
 # SOLPHA Futures Desk — Gói thương mại (v1.0.0)
 
-Ứng dụng web tĩnh (PWA) để theo dõi **tín hiệu futures đa khung** cho SOL, BTC, ETH, DOGE và các cặp bạn thêm. Chạy hoàn toàn trên trình duyệt, không cần máy chủ riêng: lấy dữ liệu công khai từ Binance Futures, tính chỉ báo ngay trên máy người dùng, cài được như app trên Android/iOS/máy tính. Giao diện tối, thương hiệu SOLPHA.
+Ứng dụng web tĩnh (PWA) để theo dõi **điều kiện kỹ thuật futures đa khung** cho SOL, BTC, ETH, DOGE và các cặp bạn thêm. Chạy hoàn toàn trên trình duyệt, không cần máy chủ riêng: lấy dữ liệu công khai từ Binance Futures, tính chỉ báo ngay trên máy người dùng, cài được như app trên Android/iOS/máy tính. Giao diện tối, thương hiệu SOLPHA.
 
 > English summary is at the bottom of this file.
 
@@ -15,19 +15,21 @@
 
 - **Bảng điều khiển (tab Tín hiệu):** hành động Long/Short/Chờ, xu hướng 5 khung (5M · 15M · 1H · 4H · 1D), range và volume của nến tín hiệu, giá realtime, mark price, funding.
 - **Đồng pha + Bollinger:** chỉ báo EMA9/21, RSI14, ATR14, MACD, Bollinger Bands(20,2) cho từng khung; cảnh báo khi các khung cùng hướng và chạm dải ngoài.
-- **Bộ tín hiệu có quy tắc rõ ràng** (`signals.js`): Long A/B (pullback, bứt phá sau nén), Short S1/S2/S3, Điều chỉnh, Momentum 4H; kế hoạch vào lệnh tham khảo gồm SL, TP1/TP2, khối lượng theo vốn và % rủi ro.
-- **Nhiều cặp:** thanh cặp, thêm/xoá cặp bất kỳ có trên Binance Futures, cài đặt tín hiệu riêng cho từng cặp.
-- **Công cụ kiểm chứng:** Backtest 5M, Tối ưu 30 ngày, "Soi lại thời điểm" (vì sao lúc đó có/không có tín hiệu).
+- **Bộ quy tắc kỹ thuật rõ ràng** (`signals.js`): Long A/B (pullback, bứt phá sau nén), Short S1/S2/S3, Điều chỉnh, Momentum 4H; kế hoạch vào lệnh tham khảo gồm SL, TP1/TP2, khối lượng theo vốn và % rủi ro.
+- **Nhiều cặp:** thanh cặp, thêm/xoá cặp bất kỳ có trên Binance Futures (tối đa 8), bật/tắt từng điều kiện riêng cho từng cặp trong Cài đặt (các ngưỡng số là tham số trong `signals.js` `DEFAULTS`, sửa bằng mã nguồn).
+- **Công cụ mô phỏng:** Backtest 5M (khoảng 5 ngày dữ liệu), Tối ưu 30 ngày, "Soi lại thời điểm" (vì sao lúc đó có/không có điều kiện kỹ thuật). Đây là mô phỏng đơn giản trên dữ liệu quá khứ, không chứng minh kết quả tương lai.
 - **Nhật ký giao dịch hằng ngày** có chấm điểm kỷ luật, tổng kết tháng, xuất CSV, sao lưu/khôi phục JSON.
 - **Quét tự động + thông báo** trên thiết bị (khi app đang mở), âm báo, giữ màn hình sáng tuỳ chọn.
 - **PWA:** cài được, chạy offline phần giao diện (service worker, mạng-trước), tự cập nhật sau mỗi lần deploy.
-- **Sẵn sàng Android:** `twa-manifest.json` (Bubblewrap), `.well-known/assetlinks.json`, ảnh Google Play (`play-assets/`), mẫu mô tả cửa hàng (`docs/play/LISTING.md`).
-- **Sẵn khung thanh toán Google Play Billing** (nếu có `billing.js` và thư mục `worker/`): backend Cloudflare Worker xác minh giao dịch. Đây là tuỳ chọn, mặc định tắt.
+- **Có cấu hình đóng gói Android (bạn tự build, ký và gửi duyệt):** `twa-manifest.json` (Bubblewrap), `.well-known/assetlinks.json` (còn chỗ trống dấu vân tay), ảnh Google Play (`play-assets/`), mẫu mô tả cửa hàng (`docs/play/LISTING.md`). Gói không kèm bản `.aab` đã ký.
+- **Backend + thư viện Google Play Billing kèm theo nhưng CHƯA nối vào giao diện** (nếu có `billing.js` và thư mục `worker/`): Cloudflare Worker xác minh giao dịch và thư viện phía app. `index.html` không nạp `billing.js`, chưa có màn hình mua gói, Worker chưa triển khai: bạn cần tự tích hợp (xem `docs/INSTALL.md` mục 6). Mặc định tắt.
+- Phông Roboto **tự host trong gói** (thư mục `fonts/`), app không gọi Google Fonts.
 - Không phụ thuộc framework hay bước build: HTML + CSS + JavaScript thuần.
 
 ## Cấu trúc tệp
 
 ```
+fonts/                Phông Roboto (woff2) tự host, kèm giấy phép phông
 index.html            Giao diện chính (5 tab: Tín hiệu · Phân tích · Công cụ · Nhật ký · Cài đặt)
 privacy.html          Mẫu chính sách quyền riêng tư (điền {{...}} rồi nhờ luật sư soát)
 terms.html            Mẫu điều khoản + cảnh báo rủi ro (điền {{...}})
@@ -62,7 +64,7 @@ CHANGELOG.md
 - **Để sinh icon / ảnh Play:** Node 18+, `npm i playwright` và Chromium (`npx playwright install chromium`).
 - **Để đóng gói Android:** tài khoản Google Play Console, và PWABuilder (web) hoặc Bubblewrap (cần JDK 17 + Android SDK).
 - **Để bật thanh toán Play:** tài khoản Cloudflare (Worker + KV) và Google Cloud service account.
-- Người dùng cuối cần truy cập được `fapi.binance.com` / `fstream.binance.com` / `api.binance.com` (một số quốc gia/mạng chặn Binance).
+- Người dùng cuối cần truy cập được `fapi.binance.com` / `fapi1.binance.com` / `fstream.binance.com` / `api.binance.com` (một số quốc gia/mạng chặn Binance; khi bị chặn app hiện thông báo và không có dữ liệu).
 
 ## Bắt đầu nhanh
 
@@ -79,7 +81,7 @@ Xem `LICENSE.md` (Single / Extended) và `docs/SUPPORT.md`.
 
 ## English summary
 
-**SOLPHA Futures Desk** is a static PWA (plain HTML/CSS/JS, no build step, no server of its own) that tracks multi-timeframe futures signals for SOL, BTC, ETH, DOGE and any pair you add. It pulls public Binance Futures data, computes EMA/RSI/ATR/MACD/Bollinger in the browser, shows a cockpit with Long/Short/Wait, a reference trade plan (SL/TP, position size from equity and risk %), a 5M backtest, a 30-day optimiser, a replay tool, a daily trading journal with discipline scoring, notifications, and installs as an app. Android packaging files (Bubblewrap/TWA, Digital Asset Links, Play Store graphics and listing template) and an optional Google Play Billing backend (Cloudflare Worker) are included.
+**SOLPHA Futures Desk** is a static PWA (plain HTML/CSS/JS, no build step, no server of its own) that tracks multi-timeframe futures technical conditions for SOL, BTC, ETH, DOGE and any pair you add. It pulls public Binance Futures data, computes EMA/RSI/ATR/MACD/Bollinger in the browser, shows a cockpit with Long/Short/Wait, a reference trade plan (SL/TP, position size from equity and risk %), a 5M backtest (about 5 days), a 30-day optimiser, a replay tool, per-pair on/off switches for each rule (numeric thresholds live in `signals.js` `DEFAULTS`), a daily trading journal with discipline scoring, notifications, and installs as an app. Android packaging configuration (Bubblewrap/TWA, Digital Asset Links, Play Store graphics and listing template; you build, sign and submit the app yourself) is included, as are a Google Play Billing backend (Cloudflare Worker) and client library that are NOT yet connected to the interface (you need to integrate them). The Roboto font is self-hosted in the package; the app does not call Google Fonts.
 
 **Requirements:** any static HTTPS host and a domain; Node 18+ only for tests and icon generation; Google Play Console for Android.
 

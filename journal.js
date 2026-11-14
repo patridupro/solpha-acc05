@@ -3,11 +3,11 @@
 (function () {
   const KEY = "solpha_journal";
   const CRITERIA = [
-    { id: "kyluat", w: 30, name: "Kỷ luật theo chỉ báo", hint: "Chỉ vào khi app đủ điều kiện; đứng ngoài khi WAIT." },
-    { id: "setup", w: 25, name: "Setup đúng", hint: "Đồng pha 1D/4H/1H, chạm BB / nến tín hiệu đạt." },
-    { id: "ruiro", w: 20, name: "Quản trị rủi ro", hint: "Đặt SL trước khi vào; mỗi lệnh rủi ro ≤ 1–2% tài khoản." },
-    { id: "chianho", w: 15, name: "Chia nhỏ lệnh", hint: "Vào 2–3 phần tại vùng setup tốt, không all-in một giá." },
-    { id: "tamly", w: 10, name: "Không FOMO / gỡ / chase", hint: "Không vào vì sợ lỡ, không gỡ lỗ, không đuổi BB trên." }
+    { id: "kyluat", w: 30, name: "Tuân thủ kế hoạch của bạn", hint: "Bạn tự đặt quy tắc vào/ra lệnh và ghi lại có tuân thủ không." },
+    { id: "setup", w: 25, name: "Setup đúng kế hoạch", hint: "Tôi có vào đúng điều kiện tôi tự đặt không (ví dụ đồng pha khung lớn, nến tín hiệu)?" },
+    { id: "ruiro", w: 20, name: "Quản trị rủi ro", hint: "Tôi có đặt SL trước khi vào không? Mức rủi ro mỗi lệnh có đúng mức tôi tự đặt không?" },
+    { id: "chianho", w: 15, name: "Chia nhỏ lệnh", hint: "Tôi có chia lệnh theo kế hoạch của mình, không dồn vào một giá không?" },
+    { id: "tamly", w: 10, name: "Không FOMO / gỡ / chase", hint: "Tự đánh giá: không vào vì sợ lỡ, không gỡ lỗ, không đuổi giá." }
   ];
   const NA_WHEN_IDLE = ["setup", "ruiro", "chianho"];
   const $ = (id) => document.getElementById(id);
@@ -85,8 +85,8 @@
     const tag = `${d}/${m}/${y}`;
     const hits = logs.filter((l) => l.alert && String(l.t).includes(tag));
     $("jSignals").innerHTML = hits.length
-      ? `App báo ${hits.length} tín hiệu ngày này:<br>` + hits.slice(0, 6).map((h) => `• ${esc(h.t)} — ${esc(h.text)}`).join("<br>")
-      : "App không ghi nhận tín hiệu nào ngày này (nhật ký app chỉ lưu khi app đang mở). Không có tín hiệu mà vẫn vào lệnh = trừ điểm Kỷ luật.";
+      ? `App ghi nhận ${hits.length} điều kiện kỹ thuật ngày này:<br>` + hits.slice(0, 6).map((h) => `• ${esc(h.t)} — ${esc(h.text)}`).join("<br>")
+      : "App không ghi nhận điều kiện nào ngày này (nhật ký app chỉ lưu khi app đang mở). Mục này chỉ để bạn đối chiếu với kế hoạch của mình.";
   }
 
   function renderMonth() {
@@ -104,7 +104,7 @@
       <div><span>Điểm TB</span><b>${avg ?? "—"} ${avg != null ? "(" + grade(avg) + ")" : ""}</b></div>
       <div><span>Ngày hạng A</span><b>${scores.filter((s) => s >= 85).length}</b></div>
       <div><span>Đứng ngoài</span><b>${idle}</b></div>
-      <div><span>Chuỗi kỷ luật dài nhất</span><b>${best} ngày</b></div>
+      <div><span>Chuỗi tuân thủ kế hoạch dài nhất</span><b>${best} ngày</b></div>
       <div><span>Tổng PnL</span><b class="${pnl >= 0 ? "up" : "down"}">${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}</b></div>`;
     $("jCritBody").innerHTML = CRITERIA.map((c) => {
       const appl = days.filter((d) => ["yes", "no"].includes(db[d].c?.[c.id]));

@@ -1,7 +1,8 @@
 # SOLPHA Futures Desk — Marketplace listing (English, ready to paste)
 
-Version covered: 1.0.0 · Drafted 13/11/2026.
+Version covered: 1.0.0 · Drafted 13/11/2026 · Corrected 14/11/2026 after the compliance audit (backtest = about 5 days, optimizer = 30 days; Settings has on/off switches only; Android and billing wording).
 Use on: Gumroad, Payhip, Polar/Dodo storefront, CodeCanyon (adapt to Envato's template). Each fenced block is pasted as-is into the matching field. Replace every `[PLACEHOLDER]` before publishing. Keep the disclaimers; do not delete them to "improve conversion".
+Before publishing: re-run the Worker tests (`node --test worker/test`) and update the "39 tests" figure if it changed (not re-run in the last audit).
 
 Rules this text follows (do not break them when editing):
 - No promise or implication of profit, win rate or "accuracy". No P&L screenshots.
@@ -44,7 +45,7 @@ You receive the complete, readable source code. You host it yourself, rebrand it
 
 IMPORTANT — READ FIRST
 - This is software source code. It is NOT investment advice, NOT a trading signal service and NOT a trading bot. It does not place orders and never asks for exchange API keys.
-- No profit, win rate or performance is promised or implied. Futures trading is high risk and you can lose your entire capital. The built-in backtest is a small, simplified simulation on recent public data (roughly 30 days) and is not evidence of future results.
+- No profit, win rate or performance is promised or implied. Futures trading is high risk and you can lose your entire capital. The built-in backtest (about 5 days of data) and optimizer (30 days) are small, simplified simulations on recent public data and are not evidence of future results.
 - Signals shown by the app are the output of fixed, documented rules applied to public price data. They are not guaranteed to be right and no signals are bundled or sold with this product.
 - You must deploy and configure it yourself. Basic web-hosting knowledge is needed; Android/Play Billing setup needs more.
 - The user interface language is Vietnamese. Most documentation is also in Vietnamese (see "What is included"). Translating the UI means editing text in the source files.
@@ -61,31 +62,31 @@ Indicators and multi-timeframe view
 
 Candle rule engine (signals.js, shared by live scan and backtest)
 - Long setups A (pullback) and B (breakout after squeeze); Short setups S1, S2, S3; a counter-trend "adjusted short" mode; and a 4H/1H momentum mode.
-- Each rule is parameterised in Settings, with per-pair settings. A scan runs automatically on every closed 5-minute candle across all your pairs.
+- Each rule can be switched on or off per pair in Settings; the numeric thresholds are parameters in signals.js (DEFAULTS) that you change by editing the source. A scan runs automatically on every closed 5-minute candle across all your pairs.
 
 Trade planner
-- Three-part entry, stop-loss, take-profit levels and position size from your capital and risk percentage. Positions are skipped when the risk exceeds your configured ATR limit.
+- Three-part entry, stop-loss, take-profit levels and position size from your capital and risk percentage. Plans are skipped when the risk exceeds the built-in ATR limit (a parameter in signals.js).
 
 Backtest, 30-day optimizer and replay
-- Backtest each rule set on about 1,500 real 5M candles, split into Long/Short and by setup, with the most common reasons a setup was rejected.
-- "30-day optimize" downloads 30 days of public data in the browser, measures each condition after fees and slippage, shows first-half versus second-half stability, and lets you keep only the conditions that pass your thresholds.
+- Backtest each rule set on about 1,500 real 5M candles (about 5 days), split into Long/Short and by setup, with the most common reasons a setup was rejected.
+- "30-day optimize" downloads 30 days of public data in the browser, measures each condition after fees and slippage, shows first-half versus second-half stability, and lets you keep only the conditions that pass the built-in thresholds (a minimum number of simulated trades, a minimum share of profitable trades and a positive average R; the values are constants in the source that you can edit).
 - "Replay" lists every 5M candle around a chosen date and time with the decision and the reason.
 - All of this runs locally in the browser. Small samples, simplified assumptions: treat results as an aid to understanding the rules, not as proof.
 
-Trade journal with discipline score
-- Daily checklist on five weighted criteria (indicator discipline, correct setup, risk management, split entries, no FOMO), daily grade A-D, monthly summary, longest discipline streak, CSV export and JSON backup/restore. Data is stored locally on the device.
+Trade journal with a self-assessment score
+- Daily self-assessment checklist with weighted criteria, a daily grade A-D (your own scoring, not a performance measure), monthly summary, longest streak, CSV export and JSON backup/restore. Data is stored locally on the device.
 
 Notifications
 - Local notifications through the service worker, a test-notification button, catch-up scan of the last 90 minutes when the app is reopened, and an optional keep-screen-awake mode. Notifications are generated on the device; there is no push server.
 
 PWA and Android
 - Web app manifest, service worker with offline fallback, install prompt, maskable icons.
-- Pre-configured Trusted Web Activity manifest (twa-manifest.json, Bubblewrap/PWABuilder compatible), Play Store graphic assets and a drafted store listing and policy-answers document to start from.
+- Android packaging configuration (Trusted Web Activity manifest, twa-manifest.json, Bubblewrap/PWABuilder compatible), Play Store graphic assets and a drafted store listing and policy-answers document to start from. No signed build is included: you must build, sign and submit the Android app yourself, and fill in the Digital Asset Links fingerprint.
 
 Google Play Billing backend (optional, for subscriptions)
 - A Cloudflare Worker that verifies Google Play subscription purchases with the Google Play Developer API, acknowledges purchases, stores entitlements in Workers KV, and handles Real-time Developer Notifications (Pub/Sub). No npm dependencies. Covered by 39 automated tests.
 - A client library (billing.js) for the Digital Goods API / Payment Request flow inside a TWA.
-- NOT pre-wired: the supplied app screens do not contain a finished paywall or feature gating. The Worker and client library are provided and documented; connecting them to your own paywall UI is your job.
+- NOT connected to the interface: the backend and the Play Billing client library are included, but billing.js is not loaded by index.html, the Worker is not deployed (API_BASE is a placeholder) and the supplied app screens contain no paywall or feature gating. They are documented, but integrating them with your own purchase screen is your job.
 
 Quality
 - node tests/signals.test.js runs the rule-engine checks; the Worker has its own test suite (39 tests).
@@ -96,7 +97,7 @@ REQUIREMENTS
 - Node.js 18+ only if you want to run the tests or regenerate icons.
 - For Android: a Google Play Developer account (Google's current registration fee and testing requirements apply and may change), plus Bubblewrap or PWABuilder.
 - For subscriptions: Google Cloud project with a service account, Play Console subscription products, and a Cloudflare account (the free tier is enough for small scale).
-- Internet access to Binance public endpoints. Users in regions where Binance blocks access will not receive data. Users' IP addresses are visible to Binance, as on any website that calls its public API.
+- The Roboto typeface is bundled with the package (self-hosted); the app does not call Google Fonts. Internet access to Binance public endpoints. Users in regions where Binance blocks access will not receive data. Users' IP addresses are visible to Binance, as on any website that calls its public API.
 - You are responsible for checking Binance's current terms for your intended use of public market data, and for the legal and tax rules in your country.
 
 WHAT IS INCLUDED
@@ -112,7 +113,7 @@ WHAT IS NOT INCLUDED
 - No trading signals, no performance data, no strategy "edge", no guarantee.
 - No order execution and no exchange API key handling.
 - No 24/7 server-side alerts: the app scans only while it is running. Android may suspend web apps when the screen is off. A scan-and-push server (for example Telegram or Web Push) is not included.
-- No finished paywall screens or feature gating (see above).
+- No finished paywall screens or feature gating, and the billing library is not wired into the UI (see above).
 - No UI translation; the interface is Vietnamese.
 - No legal documents tailored to you. Privacy and terms files are templates with placeholders that you must complete and have reviewed.
 
@@ -153,7 +154,7 @@ Suggested category: Gumroad "Software development" / "Programming"; CodeCanyon "
 No. It is source code of an analysis dashboard. It shows indicators and applies fixed, documented rules to public price data. It does not execute trades, does not connect to your exchange account and does not ask for API keys. No signals are sold or guaranteed.
 
 2. Will it make me money?
-No promise of that is made, and none can be. Futures trading is high risk and you can lose all your capital. The backtest is a small, simplified simulation on about 30 days of data and is not evidence of future results. Buy it for the code and the learning/tooling value, not for expected profit.
+No promise of that is made, and none can be. Futures trading is high risk and you can lose all your capital. The backtest (about 5 days) and the 30-day optimizer are small, simplified simulations and are not evidence of future results. Buy it for the code and the learning/tooling value, not for expected profit.
 
 3. Do I need a server or a backend?
 No for the app itself: it is a static site. You only need a backend (the included Cloudflare Worker) if you want to sell subscriptions through Google Play Billing. The Worker runs on Cloudflare's free tier at small scale.
@@ -182,14 +183,14 @@ v1.0.0 (13 Nov 2026) — first public source release
 - Indicators EMA/BB/RSI/ATR/MACD across 5M, 15M, 1H, 4H, 1D.
 - Candle rule engine: Long A/B, Short S1/S2/S3, adjusted short, 4H/1H momentum; per-pair settings.
 - Trade planner (3-part entry, SL, TP1/TP2, size from risk).
-- Backtest, 30-day optimizer (fees + slippage), replay.
-- Trade journal with weighted discipline score, monthly summary, CSV/JSON export.
+- Backtest (about 5 days), 30-day optimizer (estimated fees and slippage), replay.
+- Trade journal with weighted self-assessment checklist, monthly summary, CSV/JSON export.
 - Local notifications, catch-up scan, install as PWA.
-- Android TWA configuration, Play graphic assets, store listing and policy drafts.
-- Cloudflare Worker for Google Play subscription verification (acknowledge, entitlements in KV, RTDN), client library billing.js, 39 automated tests.
+- Android TWA packaging configuration (you build and sign), Play graphic assets, store listing and policy drafts.
+- Cloudflare Worker for Google Play subscription verification (acknowledge, entitlements in KV, RTDN) and client library billing.js, provided but not connected to the UI; 39 automated tests (re-run before publishing).
 - Dark SOLPHA-branded interface (Vietnamese).
 
-Known limitations in 1.0.0: no server-side alerts; Play Billing paywall UI not pre-wired; UI language Vietnamese only.
+Known limitations in 1.0.0: no server-side alerts; billing library and Worker not connected to the UI (no paywall); no signed Android build included; UI language Vietnamese only.
 ```
 
 ## 7. Gumroad variants (optional, matches PRICING.md)
@@ -204,6 +205,6 @@ Known limitations in 1.0.0: no server-side alerts; Play Billing paywall UI not p
 ## 8. Image and video notes
 
 - First image: the real app screenshot (dark UI) with the product name only. No profit figures, no P&L, no exchange logos.
-- Show: pair tabs, indicator panel, trade planner (with a clearly sample capital), backtest panel, journal score.
+- Show: pair tabs, indicator panel, trade planner (with a clearly sample capital), the simulation tools in their not-yet-run state, the journal form. Do not show the backtest/optimizer results table (profitable-trade % and threshold columns) or the journal score.
 - Overlay text allowed: "Source code", "Self-hosted", "PWA", "Android TWA kit", "Cloudflare Worker". Not allowed: "profit", "win rate", "accurate", "signals".
 - Add a caption: "Screenshots show sample data. Not investment advice."

@@ -1,6 +1,8 @@
 # SOLPHA · Futures Desk — Câu trả lời cho các mục form Play Console
 
-Cập nhật 13/11/2026 · Áp dụng cho `app.solpha.desk` v1.0.0 (TWA, `solpha.pages.dev`).
+Cập nhật 14/11/2026 (sửa theo `docs/audit/COMPLIANCE-AUDIT.md` và `docs/audit/BRAND-AUDIT.md`) · Áp dụng cho `app.solpha.desk` v1.0.0 (TWA, `solpha.pages.dev`).
+
+Trạng thái giả định khi dùng tài liệu này (đã chốt với các thay đổi mã song song): phông Roboto tự lưu cùng app (thư mục `fonts/`, không gọi Google Fonts); thông báo đẩy trung tính (không chứa giá vào/SL/TP); nhãn kết quả trong app dùng cách diễn đạt trung tính; khi Binance bị chặn app hiện thông báo thân thiện có nút thử lại và tự ngắt vòng thử lại; **bản 1.0.0 trên Play KHÔNG có gói Pro**. Nếu một trong các điều trên chưa đúng ở bản build gửi duyệt thì phải kiểm lại các mục tương ứng. Số dòng mã đã được thay bằng tên hàm/hằng vì số dòng đổi liên tục.
 
 Cách đọc: mỗi bảng có 3 cột "Câu hỏi → Trả lời → Lý do / dòng code liên quan". Cột cuối ghi **mức xác nhận chính sách**:
 
@@ -12,13 +14,15 @@ Hạn chế khi soạn: WebFetch không mở được `support.google.com` trong
 
 ## 0. Hai trạng thái của app, hai bộ câu trả lời
 
-| | Bản 1.0.0 gửi duyệt (không có Pro) | Bản có SOLPHA Pro |
+| | Bản 1.0.0 gửi duyệt (không có Pro) | Bản có SOLPHA Pro (CHƯA tồn tại trong repo) |
 |---|---|---|
-| Thanh toán | Không. `twa-manifest.json`: `features.playBilling.enabled = false` | Google Play Billing (đăng ký tháng/năm, dùng thử 7 ngày) |
-| Máy chủ của nhà phát triển | Không | Cloudflare Worker lưu mã giao dịch (purchase token) + trạng thái gói |
-| Data safety | Không thu thập, không chia sẻ | Khai "Purchase history" (và "Device or other IDs" nếu thật sự có) |
-| Listing | Bản A trong `LISTING.md` | Bản B trong `LISTING.md` |
-| App access | Không cần tài khoản | Không tài khoản, nhưng có tính năng sau paywall: phải kèm hướng dẫn |
+| Thanh toán | Không. `twa-manifest.json`: `features.playBilling.enabled = false`; `billing.js` không được nạp trong `index.html` | Google Play Billing (đăng ký tháng/năm, dùng thử 7 ngày): cần thêm màn hình mua gói, nạp `billing.js`, đặt `API_BASE` thật |
+| Máy chủ của nhà phát triển | Không | Cloudflare Worker (`worker/`, chưa triển khai) lưu: `deviceId` (UUID ngẫu nhiên do app sinh), mã băm SHA-256 và bản mã hoá AES-GCM của purchase token, SKU, trạng thái, ngày hết hạn |
+| Data safety | "Không thu thập" (kèm phương án dự phòng ở 1A) | Khai **Purchase history** và **Device or other IDs** (xem 1B) |
+| Listing | Bản A trong `LISTING.md` (không nhắc Pro) | Bản B trong `LISTING.md`, chỉ khi UI Pro có thật |
+| App access | Không cần tài khoản | Không tài khoản, nhưng có tính năng sau paywall: phải kèm hướng dẫn mô tả ĐÚNG giao diện mua gói thực tế |
+
+**Với bản 1.0.0 chỉ dùng cột giữa.** Mọi nội dung "Bản có Pro" dưới đây là kế hoạch cho phiên bản sau, không dán vào form cho 1.0.0.
 
 Nguyên tắc: **form phải khớp đúng bản đang phát hành**. Khi bật Pro, cập nhật Data safety, chính sách quyền riêng tư và listing **trước hoặc cùng lúc** với bản phát hành đó; đừng khai trước cho thứ chưa có (khai sai theo cả hai chiều đều là vi phạm). Chính sách Play nói người phát triển chịu trách nhiệm về độ chính xác và cập nhật nhãn Data safety [Xác nhận].
 
@@ -28,38 +32,39 @@ Nguyên tắc: **form phải khớp đúng bản đang phát hành**. Khi bật 
 
 Nền tảng: Google yêu cầu **mọi app** (kể cả app không thu thập gì) điền form và đặt link chính sách quyền riêng tư; Google xem xét câu trả lời trong quá trình duyệt app [Xác nhận]. Dữ liệu chỉ xử lý cục bộ trên thiết bị, không gửi ra ngoài, thì không cần khai là "thu thập" [Xác nhận]. Dữ liệu xử lý tạm thời trong bộ nhớ chỉ để phục vụ yêu cầu thời gian thực có thể không hiển thị công khai nhưng vẫn phải có trong câu trả lời form [Xác nhận].
 
-### 1A. Bản 1.0.0 (không Pro, không backend)
+### 1A. Bản 1.0.0 (không Pro, không backend của nhà phát triển)
 
-| Câu hỏi | Trả lời | Lý do / dòng code liên quan |
+| Câu hỏi | Trả lời | Lý do / nơi trong mã |
 |---|---|---|
-| App có thu thập hoặc chia sẻ loại dữ liệu người dùng bắt buộc khai nào không? | **Không** | Không có máy chủ riêng, không tài khoản, không SDK bên thứ ba, không quảng cáo. Cài đặt, vốn, % rủi ro, nhật ký chỉ ở `localStorage` (`app.js:10-11`, khoá `solpha_*`; `journal.js:4` khoá `solpha_journal`). Không gửi đi đâu. [Một phần] |
-| Yêu cầu gửi tới Binance (`fapi`, `fstream`, `api`) có tính là thu thập/chia sẻ không? | **Không khai.** Các request chỉ chứa mã cặp và khung thời gian của dữ liệu thị trường công khai, không có dữ liệu cá nhân. | `app.js:8` (`ENDPOINTS`), `app.js:123` (`fetch`), `app.js:707` (`WS_HOSTS`). Binance thấy IP như mọi website; IP không nằm trong danh sách loại dữ liệu để chọn. [Chưa xác nhận] việc Google có coi IP gửi tới bên thứ ba là "Device or other IDs" hay không (xem phương án dự phòng bên dưới) |
-| Tải phông Roboto từ Google Fonts có phải khai không? | **Không khai** | `index.html:7-9`. Chỉ là tải tài nguyên tĩnh; Google thấy IP. Nên cân nhắc tự host phông (xem khuyến nghị cuối mục) để bỏ hẳn câu hỏi này. [Chưa xác nhận] |
-| Dữ liệu có được mã hoá khi truyền không? | **Có** (nếu form hỏi) | Mọi địa chỉ đều `https://` hoặc `wss://` (`app.js:8`, `app.js:707`, `index.html:9`). Nếu không khai thu thập gì thì câu hỏi này thường không hiện. |
-| Người dùng có thể yêu cầu xoá dữ liệu không? | **Không áp dụng** vì nhà phát triển không giữ dữ liệu nào. Trong chính sách quyền riêng tư đã ghi cách tự xoá: Cài đặt → Ứng dụng → SOLPHA → Bộ nhớ → Xoá dữ liệu. | `privacy.html` mục 6 |
+| App có thu thập hoặc chia sẻ loại dữ liệu người dùng bắt buộc khai nào không? | **Không thu thập** (phương án mặc định). **CHƯA XÁC NHẬN** việc IP gửi tới Binance và nhà cung cấp hosting có bị Google coi là "chia sẻ" hay không: xem phương án dự phòng ngay dưới bảng. | Không có máy chủ riêng, không tài khoản, không SDK bên thứ ba, không quảng cáo, không POST, không cookie, không IndexedDB (đã đo ngày 14/11/2026). Cài đặt, vốn, % rủi ro, nhật ký chỉ ở `localStorage` (hàm `store` đầu `app.js`, các khoá `solpha_*`; `journal.js` khoá `solpha_journal`). [Một phần] |
+| Yêu cầu gửi tới Binance (`fapi`, `fapi1`, `api`, `fstream`) có tính là thu thập/chia sẻ không? | **Không khai**, nhưng chính sách quyền riêng tư phải nói rõ (đã làm ở `privacy.html` mục 2). Request chỉ chứa mã cặp và khung thời gian của dữ liệu thị trường công khai. | Hằng `ENDPOINTS` (có `fapi.binance.com`, `fapi1.binance.com`, `api.binance.com`), `fetchJSON`, `WS_HOSTS` (`fstream.binance.com`) trong `app.js`. Binance thấy IP, trình duyệt, Referer như mọi website. Binance là nguồn dữ liệu công khai, không xử lý "thay mặt" nhà phát triển. **CHƯA XÁC NHẬN** cách Google coi IP gửi tới bên thứ ba (kết quả tìm kiếm cho thấy dữ liệu chuyển cho bên thứ ba thường tính là "chia sẻ", ngoại lệ cho nhà cung cấp xử lý theo chỉ dẫn của nhà phát triển; nguyên văn hiện hành chưa đọc được). |
+| Nhà cung cấp hosting (Cloudflare Pages) thấy IP khi tải app | **Không khai riêng**; ghi trong `privacy.html` mục 2. | Mọi tệp tải từ `solpha.pages.dev`. Chủ app phải **tự kiểm** Cloudflare Pages: không bật Web Analytics, không bật Logpush/xuất nhật ký ra nơi khác trước khi giữ câu "không dùng nhật ký để nhận diện cá nhân" (chưa kiểm trong phiên này). |
+| Phông chữ có phải khai không? | **Không áp dụng nếu Roboto đã tự host**: app không còn gọi Google Fonts, `privacy.html` mục 2 ghi "phông lưu cùng app". | Thư mục `fonts/` (woff2) do service worker lưu trong Cache Storage. **Phải kiểm bản build thực: mở DevTools > Network, không còn request tới `fonts.googleapis.com` / `fonts.gstatic.com`.** Nếu còn thì quay lại câu trả lời cũ: khai thêm Google Fonts ở phương án dự phòng. |
+| Dữ liệu có được mã hoá khi truyền không? | **Có** (nếu form hỏi) | Mọi địa chỉ đều `https://` hoặc `wss://`. Nếu không khai thu thập gì thì câu hỏi này thường không hiện. |
+| Người dùng có thể yêu cầu xoá dữ liệu không? | **Không áp dụng** vì nhà phát triển không giữ dữ liệu nào. Chính sách đã ghi cách tự xoá: Cài đặt > Ứng dụng > SOLPHA > Bộ nhớ > Xoá dữ liệu. | `privacy.html` mục 6 (neo `#xoa-du-lieu`) |
 | App có cho tạo tài khoản không (mục xoá tài khoản)? | **Không** | Không có đăng ký/đăng nhập trong `index.html` / `app.js` |
-| Link chính sách quyền riêng tư | `https://solpha.pages.dev/privacy.html` | Phải điền xong `[TÊN PHÁP NHÂN]`, `[EMAIL]`, `[WEBSITE]` trong file; có link trong app (footer `index.html:257`), đúng yêu cầu "link trong app và trong Play Console" [Xác nhận] |
+| Link chính sách quyền riêng tư | `https://solpha.pages.dev/privacy.html` | Phải điền `[TÊN PHÁP NHÂN]`, `[EMAIL]`, `[WEBSITE]` trong file (CHƯA điền); có link trong app (footer `index.html`). Trang pháp lý tự dùng giao diện SOLPHA, không cần kèm `?source=play` (xem `brand.js`). |
 
-**Phương án dự phòng nếu Play yêu cầu sửa** (khai thận trọng hơn): chọn "Có thu thập", loại **Device or other IDs** (chỉ vì địa chỉ IP gửi tới bên thứ ba), mục đích **App functionality**, đánh dấu **có chia sẻ với bên thứ ba** (Binance; Google Fonts), dữ liệu **không** tuỳ chọn tắt được. Chỉ dùng khi bị yêu cầu, vì nhãn này làm app trông "thu thập" hơn thực tế.
+**Phương án dự phòng nếu Play yêu cầu sửa hoặc nếu muốn khai thận trọng ngay từ đầu:** chọn "Có thu thập", loại **Device or other IDs** (chỉ vì địa chỉ IP gửi tới bên thứ ba), mục đích **App functionality**, đánh dấu **có chia sẻ với bên thứ ba** (Binance; nhà cung cấp hosting; thêm Google Fonts nếu build chưa tự host phông), dữ liệu **không** tuỳ chọn tắt được. Nhược điểm: nhãn này làm app trông "thu thập" hơn thực tế. Quyết định giữa hai phương án là của chủ app (**CHƯA XÁC NHẬN** phương án nào Google chấp nhận; khai thừa an toàn hơn bị từ chối vì khai thiếu).
 
-**Khuyến nghị kỹ thuật để câu trả lời "Không" vững hơn** (không sửa trong đợt này, chỉ ghi nhận): tự host phông Roboto thay vì tải từ Google Fonts; giữ nguyên chính sách "không SDK bên thứ ba" (nếu thêm Firebase/Analytics/Crashlytics thì bảng này sai ngay).
+**Việc kỹ thuật làm câu trả lời "Không" vững hơn:** (1) đã/đang tự host Roboto (loại Google khỏi danh sách bên nhận IP); (2) cân nhắc bỏ `fapi1.binance.com` khỏi `ENDPOINTS` nếu không cần host dự phòng (nếu bỏ thì sửa lại `privacy.html` mục 2 và bảng này); (3) giữ nguyên "không SDK bên thứ ba": nếu thêm Firebase/Analytics/Crashlytics thì bảng này sai ngay.
 
-### 1B. Bản có SOLPHA Pro + Cloudflare Worker
+### 1B. Bản có SOLPHA Pro + Cloudflare Worker (CHƯA tồn tại: chỉ dùng sau khi UI mua gói được nối và Worker được triển khai)
 
-Chỉ áp dụng nếu Worker **thật sự** lưu các trường dưới đây. Trước khi khai, rà lại mã Worker và cấu hình Cloudflare (logs, Logpush, KV/D1) để biết chính xác lưu gì.
+Dữ liệu dưới đây lấy từ `worker/src/index.js` và `worker/README.md`. Trước khi khai, rà lại mã Worker và cấu hình Cloudflare (logs, Logpush, KV) để chắc chắn đúng.
 
-| Câu hỏi | Trả lời | Lý do / dòng code liên quan |
+| Câu hỏi | Trả lời | Lý do / nơi trong mã |
 |---|---|---|
-| App có thu thập dữ liệu người dùng không? | **Có** | Worker nhận và lưu mã giao dịch (purchase token) + trạng thái gói để mở tính năng Pro. |
-| Loại dữ liệu: Financial info > **Purchase history** | **Khai: thu thập**. Mục đích: **App functionality** (mở khoá Pro) và **Fraud prevention, security, and compliance** (xác minh giao dịch với Google Play Developer API). Chọn "Người dùng có thể chọn có/không thu thập" (chỉ phát sinh khi họ chủ động đăng ký). | Dữ liệu: purchase token, product ID, thời điểm mua/hết hạn, trạng thái (active, trial, cancelled, expired). Không lưu số thẻ: Google Play xử lý thanh toán. [Một phần] về việc Purchase history thuộc nhóm Financial info; đối chiếu nhãn trên form |
-| Loại dữ liệu: **Device or other IDs** | Chỉ khai nếu app sinh ra mã cài đặt/UUID/ID thiết bị và gửi lên Worker. Nếu chỉ dùng purchase token thì **không khai thêm**. | Thiết kế khuyến nghị: không tạo ID riêng, dùng purchase token làm khoá. Nếu có thêm ID thì khai và ghi vào chính sách quyền riêng tư. |
-| IP trong nhật ký Cloudflare | Tắt ghi nhật ký IP của Worker nếu không cần. Nếu phải bật (Workers Logs, Logpush) thì ghi rõ vào chính sách và cân nhắc khai "Device or other IDs". | [Chưa xác nhận] cách Google coi IP trong log máy chủ |
-| Có chia sẻ dữ liệu với bên thứ ba không? | **Không** (Cloudflare chỉ là nhà cung cấp dịch vụ xử lý thay cho nhà phát triển; Google Play là bên cung cấp thanh toán). | Chuyển dữ liệu cho nhà cung cấp dịch vụ xử lý thay mặt nhà phát triển thường không tính là "chia sẻ" [Chưa xác nhận nguyên văn hiện hành; đối chiếu định nghĩa "share" trên form] |
+| App có thu thập dữ liệu người dùng không? | **Có** | Worker nhận và lưu dữ liệu để mở tính năng Pro. |
+| Loại dữ liệu: Financial info > **Purchase history** | **Khai: thu thập**. Mục đích: **App functionality** (mở khoá Pro) và **Fraud prevention, security, and compliance** (xác minh giao dịch với Google Play Developer API). Chọn "Người dùng có thể chọn có/không thu thập" (chỉ phát sinh khi họ chủ động đăng ký). | Dữ liệu: băm SHA-256 và bản mã hoá AES-GCM của purchase token, SKU, trạng thái (active, trial, cancelled, expired), ngày hết hạn. Không lưu số thẻ. (BILLING-AUDIT: không lưu IP, email, tên; nhưng `deviceId` đi trong query của `GET /api/entitlement` nên có thể nằm trong nhật ký Cloudflare.) [Một phần] về việc Purchase history thuộc nhóm Financial info; đối chiếu nhãn trên form. |
+| Loại dữ liệu: **Device or other IDs** | **CÓ khai.** Mã ngẫu nhiên (UUID) do app sinh (`solpha_device` trong `billing.js`) và gửi lên Worker (`/api/verify`) để gắn quyền lợi. Mục đích: **App functionality**; **Fraud prevention, security, and compliance**. Không chia sẻ cho bên thứ ba. | Đây là sửa so với bản cũ của tài liệu (từng ghi "không tạo ID riêng"; thực tế `billing.js` có sinh và Worker có lưu `deviceId`). |
+| IP trong nhật ký Cloudflare | Worker dùng IP để giới hạn tốc độ trong bộ nhớ, không lưu. `worker/wrangler.toml` không bật `[observability]`; **CHƯA XÁC NHẬN** mặc định Workers Logs/Logpush của tài khoản Cloudflare: kiểm trên dashboard, tắt nếu không cần. Nếu bật thì ghi vào chính sách và cân nhắc khai IP. | [Chưa xác nhận] cách Google coi IP trong log máy chủ |
+| Có chia sẻ dữ liệu với bên thứ ba không? | **Không** (Cloudflare là nhà cung cấp dịch vụ xử lý thay cho nhà phát triển; Google Play là bên cung cấp thanh toán). | Chuyển dữ liệu cho nhà cung cấp dịch vụ xử lý thay mặt nhà phát triển thường không tính là "chia sẻ" [Chưa xác nhận nguyên văn hiện hành; đối chiếu định nghĩa "share" trên form]. |
 | Mã hoá khi truyền? | **Có** | Worker chỉ nhận qua HTTPS (Cloudflare mặc định). |
-| Cách xoá dữ liệu | **Có**: email `[EMAIL]` hoặc trang `https://solpha.pages.dev/privacy.html#xoa-du-lieu` (cần thêm mục này). Worker phải có thao tác xoá theo purchase token thực sự dùng được. | Nếu khai "có" mà không làm được là khai sai. Dữ liệu giao dịch có thể phải giữ theo luật thuế/kế toán: ghi rõ thời hạn giữ trong chính sách. |
+| Cách xoá dữ liệu | **Có**: email `[EMAIL]` hoặc `https://solpha.pages.dev/privacy.html#xoa-du-lieu` (neo này đã có). **Lưu ý (theo `docs/audit/BILLING-AUDIT.md` F10, kiểm lại nếu Worker đã được vá): Worker KHÔNG có API/lệnh xoá**, không đặt hạn (TTL) cho khoá KV. Trước khi khai "có thể yêu cầu xoá", phải có quy trình thật (ví dụ xoá thủ công khoá `ENT` theo `deviceId` hoặc băm token) và điền `[SỐ NGÀY]` giữ dữ liệu trong `privacy.html` mục 4. | Khai "có" mà không làm được là khai sai. Dữ liệu giao dịch có thể phải giữ theo luật thuế/kế toán: ghi rõ thời hạn. |
 | Dữ liệu cá nhân khác (email, tên, vị trí, danh bạ) | **Không** | Tiếp tục đúng như `privacy.html` mục 3. |
 
-Việc phải làm trong `privacy.html` khi bật Pro (ghi nhận, chưa sửa trong đợt này): mục 4 hiện chỉ nói "mã xác nhận mua hàng". Cần thay bằng danh sách trường Worker lưu, mục đích, nhà xử lý (Cloudflare), thời hạn giữ, cách yêu cầu xoá, và nói rõ app vẫn không thu thập dữ liệu cá nhân khác.
+`privacy.html` mục 4 đã viết sẵn theo danh sách trường ở trên, ghi rõ "chỉ áp dụng khi gói Pro được bật". Khi bật Pro: điền `[SỐ NGÀY]`, đối chiếu lại từng dòng với mã Worker thật, và phát hành bản cập nhật chính sách **trước hoặc cùng lúc** với bản app.
 
 ---
 
@@ -71,18 +76,29 @@ Danh sách tuỳ chọn trong form (thay đổi theo thời điểm; các bản 
 
 | Câu hỏi | Trả lời | Lý do / dòng code liên quan |
 |---|---|---|
-| App có là sàn giao dịch tiền mã hoá không? | **Không** | Không đặt lệnh, không khớp lệnh, không kết nối tài khoản sàn, không nhận API key. `terms.html` mục 2; `index.html:250` ("Tự quản size/leverage"). Đặt tên mục "Lệnh tham khảo — Không phải lệnh sàn" (`index.html`, thẻ `order-card`). |
+| App có là sàn giao dịch tiền mã hoá không? | **Không** | Không đặt lệnh, không khớp lệnh, không kết nối tài khoản sàn, không nhận API key. `terms.html` mục 2; dòng "Tự quản size/leverage" ở thẻ Rule cố định và pill "Không phải lệnh sàn" trong `index.html`. |
 | App có là ví / giữ khoá / giữ tiền của người dùng không? | **Không** | Không có private key, không chứa tài sản. |
 | Bán/giao dịch NFT hoặc token? | **Không** | |
 | Giao dịch chứng khoán / quản lý danh mục? | **Không** | App không quản lý danh mục thật của người dùng. Nhật ký `journal.js` là ghi chú cá nhân tự nhập. |
 | Cho vay, thanh toán, chuyển tiền, bảo hiểm? | **Không** | |
-| Có tính năng "tư vấn tài chính"? | **Hướng dẫn chọn:** nếu form có mục tư vấn/phân tích đầu tư (loại hỗ trợ) thì **cân nhắc chọn đúng mục đó thay vì "không có tính năng tài chính"**, vì app tạo "kế hoạch tham khảo" gồm SL/TP/khối lượng tính từ vốn và % rủi ro của chính người dùng (`app.js:266-277`, `app.js:580-603`). Khai đúng bản chất an toàn hơn khai thiếu; tờ khai không khớp hành vi app có thể bị từ chối. Nếu form chỉ có các tuỳ chọn sàn/ví/NFT/chứng khoán/vay thì chọn "Không có tính năng tài chính" kèm ghi chú gửi duyệt (xem dưới). | [Chưa xác nhận] tuỳ chọn nào có trong form hiện hành. Một phản hồi trong diễn đàn Play ghi nhận trường hợp bị từ chối vì khai báo "không chính xác": ghi nhận cho thấy Google đối chiếu khai báo với hành vi app [Một phần] |
+| Có tính năng "tư vấn tài chính"? | **QUYẾT ĐỊNH CỦA CHỦ APP, CHƯA XÁC NHẬN danh sách tuỳ chọn hiện hành.** Xem hai phương án ngay dưới bảng. | App tạo "kế hoạch tham khảo" (vùng vào, mức dừng lỗ, mục tiêu, khối lượng) tính từ vốn và % rủi ro do chính người dùng nhập (các hàm `planText`, `renderAction` trong `app.js`). Phép tính theo công thức công khai, nhưng có yếu tố "theo số liệu của người dùng" nên không thể nói app hoàn toàn không có yếu tố tài chính. Một phản hồi trên diễn đàn Play ghi nhận trường hợp bị từ chối vì khai báo "không chính xác": Google đối chiếu khai báo với hành vi app [Một phần]. |
 | Ghi chú cho đội duyệt (nếu có ô ghi chú / khi kháng nghị) | Dán đoạn tiếng Anh dưới đây. | |
+
+**Hai phương án khai (chủ app chọn sau khi đọc danh sách tuỳ chọn hiện hành trên Play Console):**
+
+| | Phương án A: "công cụ phân tích, không có tính năng tài chính" | Phương án B: khai loại hỗ trợ/tư vấn tài chính ("Financial advice" hoặc "Other" nếu form có) |
+|---|---|---|
+| Khi nào hợp | Form chỉ có các mục sàn / ví / NFT / chứng khoán / vay / thanh toán và không có mục nào gần với phân tích đầu tư | Form có mục "Financial advice", "Other" hoặc mục tương đương (tìm kiếm ngày 14/11/2026 cho thấy nhóm "Credit monitoring and reporting, Financial advice, Insurance, Other"; **CHƯA XÁC NHẬN nguyên văn**) |
+| Lập luận | App chỉ đọc dữ liệu công khai, không đặt lệnh, không giữ tiền, không kết nối tài khoản; kế hoạch là phép tính từ quy tắc kỹ thuật công khai | App tính khối lượng/SL/TP theo vốn người dùng nhập nên có thể bị xem là dịch vụ phân tích/tư vấn tài chính; khai đúng bản chất |
+| Rủi ro | Bị từ chối vì khai "không chính xác" nếu Google xếp app vào nhóm tư vấn | Có thể kéo thêm yêu cầu xét duyệt hoặc câu hỏi bổ sung; nhãn trông "tài chính" hơn |
+| **Khuyến nghị thận trọng** | Chỉ dùng khi form **không** có mục phù hợp hơn | **Nên ưu tiên khi form có mục phù hợp**: khai thừa an toàn hơn khai thiếu. Kèm đoạn ghi chú tiếng Anh dưới đây |
+
+Cả hai phương án đều **phải đi cùng** các thay đổi giao diện trung tính hoá (không "mua khi/bán khi", không "Vào ngay", không "giữ", không thông báo đẩy chứa mức giá, nhãn "Lệnh có lãi (mô phỏng)" thay cho "Thắng", "Đủ ngưỡng" thay cho "đạt chuẩn/GIỮ/TẮT"); nếu chưa làm đủ thì rủi ro tăng ở cả hai phương án (xem `REVIEW-RISKS.md` R1, R3).
 
 Đoạn ghi chú cho đội duyệt (tiếng Anh):
 
 ```
-SOLPHA is a read-only technical analysis and journaling tool for crypto futures. It displays public Binance market data and calculates indicators on the user's device. It is not an exchange, broker, wallet or trading venue. It has no account system, does not connect to any exchange account or API key, does not place or route orders, does not hold, transfer or convert funds, and has no custody of assets. "Reference plans" (entry zone, stop level, targets, position size) are arithmetic outputs of published technical rules and the capital/risk % the user types in; they are labelled as not advice and not exchange orders. The app is for users 18+. Paid plan (when enabled): digital software features sold only through Google Play Billing.
+SOLPHA is a read-only technical analysis and journaling tool for crypto futures. It displays public Binance market data and calculates indicators on the user's device. It is not an exchange, broker, wallet or trading venue. It has no account system, does not connect to any exchange account or API key, does not place or route orders, does not hold, transfer or convert funds, and has no custody of assets. "Reference plans" (entry zone, stop level, targets, suggested position size) are arithmetic outputs of published technical rules and the capital / risk % that the user types in; they are labelled as reference only, not advice and not exchange orders. The app is for users 18+. Version 1.0.0 has no in-app purchases and no paid features.
 ```
 
 Điều kiện kích hoạt khai báo lại (nếu sau này có): kết nối API key sàn, đặt lệnh hộ, copy-trading, giữ tiền, ví, tín hiệu cá nhân hoá do con người đưa ra, bán "tín hiệu" qua kênh khác. Mỗi cái làm thay đổi toàn bộ hồ sơ này và có thể kéo theo yêu cầu giấy phép.
@@ -107,7 +123,7 @@ Nền tảng: xếp hạng qua bảng câu hỏi IARC; trả lời sai hoặc c�
 | Có tương tác giữa người dùng / nội dung do người dùng tạo? | **Không** | Nhật ký chỉ nằm trên máy người dùng, không tải lên, không chia sẻ. |
 | Có chia sẻ vị trí người dùng? | **Không** | `_headers`: `Permissions-Policy: geolocation=()`. Không có mã định vị. |
 | Cho phép mua hàng kỹ thuật số? | Bản 1.0.0: **Không**. Bản có Pro: **Có** (mua trong app). | Play Billing khi bật |
-| Truy cập Internet không giới hạn / trình duyệt? | **Không** | App không phải trình duyệt; chỉ gọi các tên miền cố định ở `app.js:8`, `app.js:707`, `index.html:9`. Có liên kết ra ngoài trong `terms.html`/`privacy.html` (Google Support, Binance privacy) là liên kết thông tin. |
+| Truy cập Internet không giới hạn / trình duyệt? | **Không** | App không phải trình duyệt; chỉ gọi các tên miền cố định của Binance (hằng `ENDPOINTS`, `WS_HOSTS` trong `app.js`). Có liên kết ra ngoài trong `terms.html`/`privacy.html` (Google Support, Binance, Cloudflare, Google privacy) là liên kết thông tin. |
 | Kết quả dự kiến | Mức thấp (khoảng 3+ / Everyone / PEGI 3 / USK 0 tuỳ cơ quan); mua trong app sẽ hiện nhãn "In-app purchases" khi có Pro. | [Chưa xác nhận] Hạng cuối cùng do IARC quyết định |
 
 Điều chỉnh độc lập: **Target audience đặt 18+ dù hạng nội dung thấp** (xem mục 4). Hạng nội dung và độ tuổi mục tiêu là hai khai báo riêng.
@@ -131,7 +147,7 @@ Nền tảng: phải khai độ tuổi mục tiêu trước khi phát hành app 
 
 | Câu hỏi | Trả lời | Lý do |
 |---|---|---|
-| App có chứa quảng cáo không? | **Không** | Không có SDK quảng cáo; `index.html`, `app.js` không nạp script ngoài nào ngoài file cùng nguồn. Lưu ý: nhãn "chứa quảng cáo" không bao gồm lời mời mua gói Pro [Xác nhận] nên bán Pro vẫn là "Không quảng cáo". |
+| App có chứa quảng cáo không? | **Không** | Không có SDK quảng cáo; `index.html`, `app.js` không nạp script ngoài nào ngoài file cùng nguồn (đã đo: không host quảng cáo/phân tích). Lưu ý: nhãn "chứa quảng cáo" không bao gồm lời mời mua gói Pro [Xác nhận] nên bán Pro vẫn là "Không quảng cáo". |
 | Advertising ID | **Không dùng** | Kiểm tra trên file `.aab` thật bằng `bundletool`/`aapt2 dump permissions`: nếu có quyền `com.google.android.gms.permission.AD_ID` do thư viện kéo vào thì phải khai "có dùng" hoặc gỡ quyền. [Chưa xác nhận] cho bản build thực |
 
 ---
@@ -143,35 +159,39 @@ Nền tảng: nếu toàn bộ hoặc một phần app bị khoá bởi đăng n
 | Câu hỏi | Trả lời | Lý do |
 |---|---|---|
 | Bản 1.0.0 (không Pro): chọn gì? | **"Tất cả chức năng đều khả dụng mà không cần quyền truy cập đặc biệt."** Không cần tài khoản test. Vẫn nên dán ghi chú dưới đây vào ô hướng dẫn nếu form cho phép. | Không có đăng nhập. |
-| Bản có Pro: chọn gì? | Chọn nhóm **có hạn chế**, nhập hướng dẫn bên dưới (tiếng Anh). | Có chức năng sau paywall. |
+| Bản có Pro: chọn gì? (chưa áp dụng cho 1.0.0) | Chọn nhóm **có hạn chế**, nhập hướng dẫn ở khung "bản có Pro" (tiếng Anh), mô tả đúng giao diện thật. | Có chức năng sau paywall. |
 
-Ghi chú cho reviewer, bản 1.0.0 (tiếng Anh, dán nguyên):
+Ghi chú cho reviewer, bản 1.0.0 (tiếng Anh, dán nguyên; mô tả đúng những gì reviewer sẽ thấy ở bản build gửi duyệt, kiểm lại từng câu trên máy thật trước khi dán):
 
 ```
 No sign-in is required. All features are available on first launch.
 
-How to see real-time prices: open the app. The first screen ("Tín hiệu"/Signal tab) shows the live price for SOLUSDT with a LIVE indicator within a few seconds. Tabs at the bottom: Signal, Analysis (multi-timeframe indicators), Tools (backtest / 30-day optimisation / replay), Journal, Settings. Use the pair bar at the top to switch between SOL, BTC, ETH, DOGE or add a custom pair.
+First launch: a "Before you use" dialog (in Vietnamese) shows a risk warning and an 18+ confirmation. Tap the button "Tôi đã hiểu và đồng ý" ("I understand and agree") to continue. It is shown once.
 
-Data source: public Binance Futures market-data endpoints (fapi.binance.com, fstream.binance.com, api.binance.com). They are read-only and need no API key. The app does not connect to any exchange account and does not place orders.
+How to see real-time prices: the first screen (the "Tín hiệu" / Signal tab) shows the live price for SOLUSDT within a few seconds. A timestamp with a lightning icon next to the price means the WebSocket stream is live (the "REALTIME" pill is on the Analysis tab). The pair bar at the top switches between SOL, BTC, ETH and DOGE, or adds a custom USDT pair (up to 8 pairs). Tabs at the bottom: Signal, Analysis (multi-timeframe indicators), Tools (about 5-day backtest, 30-day optimisation, replay), Journal, Settings. The interface language is Vietnamese only.
 
-Region note: if your test device is in a region where Binance blocks public market data (for example the United States), prices may not load. A screen recording of the full flow from a supported region is at [VIDEO_URL] (unlisted). Please contact [EMAIL] and we will respond within one business day.
+Data source: public Binance Futures market-data endpoints (fapi.binance.com, fapi1.binance.com, api.binance.com, and the WebSocket host fstream.binance.com). They are read-only and need no API key. The app does not connect to any exchange account and does not place orders.
 
-To see the reference plan: Settings tab, enter Capital (e.g. 1000) and Risk per trade (e.g. 1%), then return to the Signal tab. When a technical condition is met the app shows an entry zone, stop level, targets and suggested size; otherwise it shows "waiting". These are reference calculations, not orders or advice.
+Region note: Binance blocks public market data in some countries (for example the United States). If your test device is in such a region the app cannot load prices: it shows a message saying that market data from Binance is not reachable on this network or region, with a Retry button, and it stops retrying automatically after a few attempts. A screen recording of the full flow from a supported region is at [VIDEO_URL] (unlisted). Please contact [EMAIL] and we will respond within one business day.
+
+To see the reference plan: open the Settings tab and enter Capital (e.g. 1000) and Risk per trade (e.g. 1%); apart from these two inputs, Settings only has on/off switches for the technical conditions and display options. Return to the Signal tab: when a technical condition is met the app shows a reference entry zone, stop level, targets and suggested size; otherwise it shows "waiting" (for about 3 hours after a plan it may also show a line with the latest reference plan). These are reference calculations, not orders or advice.
 ```
 
-Ghi chú bổ sung cho reviewer, bản có Pro (tiếng Anh, nối thêm vào đoạn trên):
+Khuyến nghị: quay video màn hình (không có âm thanh cũng được) từ khu vực Binance truy cập được, gồm: mở lần đầu (hộp "Trước khi dùng"), giá realtime, 5 tab, nhập vốn/rủi ro ở Cài đặt, thêm một cặp, chạy Backtest, bật thông báo thử, và (nếu quay được) màn hình khi Binance không truy cập được cùng nút thử lại. Đăng lên liên kết không liệt kê (unlisted) và dán vào `[VIDEO_URL]`.
+
+Ghi chú bổ sung cho reviewer, **chỉ cho bản có Pro và chỉ khi giao diện mua gói đã tồn tại** (khung dưới là mẫu, điền theo giao diện THẬT; app hiện KHÔNG có nhãn "Pro" và KHÔNG có nút "Restore purchase"/"Khôi phục giao dịch", nên bản cũ của đoạn này đã bị bỏ):
 
 ```
-Paid plan (SOLPHA Pro): Google Play subscriptions (monthly and yearly, 7-day free trial for eligible users). Pro features are marked with a "Pro" label inside the app. To test the purchase flow: the reviewer account [REVIEWER_GMAIL] has been added under Play Console > Settings > License testing, so purchases made with it are test purchases (no charge) and renew on an accelerated schedule. If you use a different account, please use promo code [PROMO_CODE] or contact [EMAIL] and we will add the account within one business day. Restore: Settings > "Restore purchase".
+Paid plan (SOLPHA Pro): Google Play subscriptions ([MONTHLY/YEARLY], [TRIAL LENGTH] for eligible users). Where to find it in the app: [EXACT SCREEN AND BUTTON NAME]. Features it unlocks: [EXACT LIST]. To test the purchase flow: the reviewer account [REVIEWER_GMAIL] has been added under Play Console > Settings > License testing, so purchases made with it are test purchases (no charge) and renew on an accelerated schedule. If you use a different account, please use promo code [PROMO_CODE] or contact [EMAIL] and we will add the account within one business day. Manage or cancel: Google Play > Payments and subscriptions > Subscriptions.
 ```
 
-Cách thử gói Pro bằng license tester (để đội kiểm thử nội bộ làm trước khi gửi duyệt):
+Cách thử gói Pro bằng license tester (để đội kiểm thử nội bộ làm sau khi UI mua gói và Worker đã có; không áp dụng cho 1.0.0):
 
 1. Play Console > Settings > License testing: thêm các địa chỉ Gmail của người thử, đặt "License response" là RESPOND_NORMALLY.
 2. Tải bản có Pro lên track **Internal testing** (hoặc Closed), thêm cùng Gmail vào danh sách tester, mở link opt-in và cài từ Google Play (không cài file APK ngoài vì Billing cần cài từ Play).
 3. Đăng ký thử: Play hiện hộp thoại thanh toán nhãn "test card", không trừ tiền. Gói thử có thời gian gia hạn rút ngắn: theo bài đăng của Android Developers (2018), gói 1 tháng gia hạn sau khoảng 5 phút, gói 1 năm khoảng 30 phút, dùng thử khoảng 3 phút, tối đa 6 lần gia hạn rồi tự huỷ [Một phần: nguồn 2018, nên đối chiếu số hiện hành].
-4. Thử đủ: mua → trial → chuyển thành trả phí → huỷ → hết hạn → khôi phục; xem Worker ghi đúng trạng thái.
-5. Chrome/TWA: Digital Goods API chỉ chạy khi PWA chạy trong TWA, qua HTTPS, và cần Chrome 101+; Bubblewrap bật `features.playBilling` (có tài liệu ghi cần thêm `alphaDependencies.enabled` khi build) rồi build lại AAB [Một phần: từ trang tài liệu Chrome]. Hiện cả hai cờ đang là `false` trong `twa-manifest.json`, nghĩa là **bản 1.0.0 trong repo chưa thể bán Pro**.
+4. Thử đủ: mua → trial → chuyển thành trả phí → huỷ → hết hạn → mua lại (hoặc khôi phục, nếu đã thêm nút khôi phục vào giao diện); xem Worker ghi đúng trạng thái.
+5. Chrome/TWA: Digital Goods API chỉ chạy khi PWA chạy trong TWA, qua HTTPS, và cần Chrome 101+; Bubblewrap bật `features.playBilling` (có tài liệu ghi cần thêm `alphaDependencies.enabled` khi build) rồi build lại AAB [Một phần: từ trang tài liệu Chrome]. Hiện cả hai cờ đang là `false` trong `twa-manifest.json`, `billing.js` chưa được nạp trong `index.html` và Worker chưa triển khai, nghĩa là **bản 1.0.0 trong repo chưa thể bán Pro**.
 6. Reviewer của Google thường dùng tài khoản của họ, không phải tài khoản bạn thêm vào License testing. Do đó nên có phương án dự phòng: mã khuyến mãi (promo code) cho gói đăng ký [Chưa xác nhận hạn mức và điều kiện], hoặc một video quay toàn bộ luồng Pro, hoặc để người dùng mới được dùng thử 7 ngày ngay trong luồng mua thật (reviewer huỷ ngay vẫn xem được).
 
 ---
@@ -197,12 +217,14 @@ bundletool dump manifest --bundle=app-release.aab | grep uses-permission
 
 | Quyền | Khai trong form / giải thích | Lý do / dòng code liên quan |
 |---|---|---|
-| `android.permission.INTERNET` | Quyền thường, không cần giải trình | Gọi Binance/Google Fonts |
-| `android.permission.POST_NOTIFICATIONS` (Android 13+) | Quyền runtime. Chỉ xin khi người dùng bấm "Bật báo" hoặc "Gửi thông báo thử" (`app.js:863-864`, `app.js:1115`). Không xin ngay khi mở app (`app.js:872` chỉ đọc trạng thái hiện có). Mục đích: thông báo ngay trên máy khi app mở và có điều kiện kỹ thuật do người dùng bật. Muốn ứng dụng có hộp thoại quyền gốc của Android, app phải nhắm API 33+ [Xác nhận]. | `twa-manifest.json`: `enableNotifications: true` (cơ chế uỷ quyền thông báo của TWA). Không có kết nối push (FCM): thông báo tạo cục bộ qua service worker (`app.js:473-476`, `sw.js` `notificationclick`). |
-| `android.permission.WAKE_LOCK` | Thường **không** nằm trong manifest của TWA. Tính năng "Giữ màn hình sáng" (`app.js:831`, `navigator.wakeLock`) do Chrome xử lý, bật bởi người dùng trong Cài đặt. | [Chưa xác nhận] cho bản build thực |
+| `android.permission.INTERNET` | Quyền thường, không cần giải trình | Gọi Binance (và tải app từ hosting) |
+| `android.permission.POST_NOTIFICATIONS` (Android 13+) | Quyền runtime. Chỉ xin khi người dùng bấm "Bật báo" hoặc "Gửi thông báo thử" (xử lý nút trong `app.js`; đã đo ngày 14/11/2026: 0 lần gọi `Notification.requestPermission()` khi mở app). Khi mở app chỉ đọc trạng thái quyền hiện có. Mục đích: thông báo ngay trên máy khi app đang chạy và có điều kiện kỹ thuật do người dùng bật (nội dung trung tính, không chứa mức giá vào/SL/TP). Muốn ứng dụng có hộp thoại quyền gốc của Android, app phải nhắm API 33+ [Xác nhận]. | `twa-manifest.json`: `enableNotifications: true` (cơ chế uỷ quyền thông báo của TWA). Không có kết nối push (FCM): thông báo tạo cục bộ qua service worker (hàm `notify` trong `app.js`, `notificationclick` trong `sw.js`). **CHƯA XÁC NHẬN** việc `POST_NOTIFICATIONS` có thật sự nằm trong AAB (cần `bundletool dump manifest`). |
+| `android.permission.WAKE_LOCK` | Thường **không** nằm trong manifest của TWA. Tính năng "Giữ màn hình sáng" (`navigator.wakeLock` trong `app.js`) do Chrome xử lý, chỉ chạy khi người dùng bật trong Cài đặt (đã đo). | [Chưa xác nhận] cho bản build thực |
 | Vị trí, camera, micro, danh bạ, SMS, bộ nhớ, lịch... | **Không xin** | `_headers`: `Permissions-Policy: camera=(), microphone=(), geolocation=()` |
 | Quyền nhạy cảm cần form khai báo riêng (SMS/Call log, all files access, ...) | **Không có** | |
-| Foreground service, background location, `SCHEDULE_EXACT_ALARM` | **Không có** | Thông báo chỉ khi app mở; không chạy nền chính thức (`terms.html` mục 1 ghi rõ Android có thể tạm dừng app) |
+| Foreground service, background location, `SCHEDULE_EXACT_ALARM` | **Không có** | Thông báo chỉ khi app đang chạy (kể cả vừa chuyển nền, tuỳ Android cho phép); không có dịch vụ chạy nền riêng (`terms.html` mục 1 ghi rõ Android có thể tạm dừng app) |
+
+Quyền thật trong AAB: **CHƯA XÁC NHẬN** (repo không có AAB). `twa-manifest.json` đặt `enableNotifications: true` nên Bubblewrap có thể thêm uỷ quyền thông báo; `WAKE_LOCK` và `AD_ID` cũng chưa kiểm. Dán kết quả `bundletool` vào hồ sơ nội bộ.
 
 Nếu `bundletool` hiện thêm quyền nằm ngoài danh sách trên (ví dụ `AD_ID`, `FOREGROUND_SERVICE`, `REQUEST_INSTALL_PACKAGES`), dừng lại và xử lý trước khi gửi duyệt.
 
@@ -226,13 +248,15 @@ Nếu `bundletool` hiện thêm quyền nằm ngoài danh sách trên (ví dụ 
 
 ## 10. Việc kèm theo trước khi bấm gửi (liên quan trực tiếp tới các câu trả lời trên)
 
-1. Điền hết `[TÊN PHÁP NHÂN]`, `[EMAIL]`, `[WEBSITE]` trong `privacy.html`, `terms.html`; trong `LISTING.md` điền `[EMAIL]`, `[WEBSITE]`.
-2. `.well-known/assetlinks.json` còn `THAY_BANG_SHA256_CUA_KHOA_KY_TU_PLAY_CONSOLE`: điền đủ dấu vân tay của khoá app signing của Play (và khoá upload nếu cần) rồi mới thử bản cài từ Play.
-3. Màn hình đầu tiên của app hiện còn **logo thương hiệu khác** ở header (`index.html:37`), nằm trong cache (`sw.js:5`), và `icon.svg` có `aria-label` nhắc thương hiệu đó (chi tiết ở `REVIEW-RISKS.md` mục R0). Hồ sơ này yêu cầu SOLPHA độc lập: phải gỡ trước khi chụp ảnh và trước khi gửi duyệt (ngoài phạm vi thư mục `docs/play/`, chưa sửa).
-4. Chạy `bundletool` kiểm quyền (mục 8).
-5. Với bản Pro: cập nhật mục 1B, `privacy.html`, listing Bản B, bật `playBilling`.
+1. Điền hết `[TÊN PHÁP NHÂN]`, `[EMAIL]`, `[WEBSITE]` trong `privacy.html`, `terms.html` (hiện còn trống); trong `LISTING.md` điền `[EMAIL]`, `[WEBSITE]`. Play từ chối chính sách thiếu liên hệ.
+2. `.well-known/assetlinks.json` còn `THAY_BANG_SHA256_CUA_KHOA_KY_TU_PLAY_CONSOLE`: điền SHA-256 của khoá app signing của Play (và khoá upload nếu cần) rồi mới thử bản cài từ Play.
+3. Thương hiệu (theo `BRAND-AUDIT.md`): đã sửa precache `sw.js` (không nạp tệp bản web thường), mở lại từ thông báo/shortcut giữ `source=play`, trang pháp lý luôn dùng giao diện SOLPHA. **Còn lại:** chưa tách build Play riêng nên mã nguồn tĩnh phục vụ cho Play vẫn chứa chuỗi/tệp của bản web thường; chưa thử trên Android thật (nhánh `android-app://`). Chi tiết ở `REVIEW-RISKS.md` R0.
+4. Chạy `bundletool` kiểm quyền (mục 8), kể cả `AD_ID`.
+5. Kiểm bản build thực: không còn request tới `fonts.googleapis.com`/`fonts.gstatic.com`; thử bằng IP Mỹ/EU/VN để xem thông báo khi Binance bị chặn.
+6. Quyết định Financial features declaration (mục 2: phương án A hay B) sau khi đọc danh sách tuỳ chọn hiện hành.
+7. Với bản Pro (sau 1.0.0): nối giao diện mua gói, nạp `billing.js`, triển khai Worker + quy trình xoá dữ liệu, điền `[SỐ NGÀY]` trong `privacy.html`, cập nhật mục 1B, listing Bản B, bật `playBilling`.
 
-## 11. Nguồn đã tra (13/11/2026)
+## 11. Nguồn đã tra (13/11/2026; kiểm toán 14/11/2026 tra bổ sung bằng WebSearch)
 
 Chính sách chung và khai báo:
 - Financial Services policy: https://support.google.com/googleplay/android-developer/answer/9876821
@@ -252,4 +276,4 @@ Chính sách chung và khai báo:
 - Quyền thông báo Android 13: https://developer.android.com/about/versions/13/changes/notification-permission
 - Thay đổi thanh toán Play 2026 (thông tin báo chí, mâu thuẫn giữa nguồn): https://www.androidheadlines.com/2026/06/google-play-store-external-billing-fee-changes.html
 
-**Điểm chưa xác nhận được tổng hợp:** nguyên văn hiện hành của mọi trang trên (chỉ đọc qua kết quả tìm kiếm); danh sách tuỳ chọn hiện hành của Financial features declaration và có mục nào hợp với "công cụ phân tích" không; danh sách khu vực pháp lý của chính sách sàn/ví; IP gửi tới bên thứ ba có phải khai trong Data safety không; Cloudflare = "nhà cung cấp dịch vụ" có miễn khai "chia sẻ" không; câu hỏi IARC về tiền mã hoá; vị trí khai báo cờ bạc; quyền thực tế trong AAB; mức phí và điều kiện thanh toán thay thế 2026; hạn mức promo code cho gói đăng ký.
+**Điểm chưa xác nhận được tổng hợp:** nguyên văn hiện hành của mọi trang trên (chỉ đọc qua kết quả tìm kiếm); danh sách tuỳ chọn hiện hành của Financial features declaration và có mục nào hợp với "công cụ phân tích" không (**CHƯA XÁC NHẬN**, chủ app quyết định ở mục 2); WebSocket tới `fstream.binance.com` có mở được ở vùng Binance cho phép không (sandbox kiểm toán bị chặn) và phản hồi chặn thật của Binance (451/403 hay lỗi mạng thô); danh sách khu vực pháp lý của chính sách sàn/ví; IP gửi tới bên thứ ba có phải khai trong Data safety không; Cloudflare = "nhà cung cấp dịch vụ" có miễn khai "chia sẻ" không; câu hỏi IARC về tiền mã hoá; vị trí khai báo cờ bạc; quyền thực tế trong AAB; mức phí và điều kiện thanh toán thay thế 2026; hạn mức promo code cho gói đăng ký.

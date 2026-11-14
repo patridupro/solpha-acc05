@@ -37,13 +37,13 @@ Khi Play Console bật Play App Signing (mặc định), Google ký lại app b�
 
 - `docs/play/LISTING.md` (nếu có trong gói) là mẫu mô tả ngắn/dài và bảng các cụm từ nên tránh. Ảnh icon 512 và feature graphic 1024×500 ở `play-assets/`, sinh lại bằng `node tools/play-assets.js` sau khi đổi thương hiệu. Ảnh chụp màn hình thật nên chụp từ điện thoại, tỷ lệ 9:16.
 - Mô tả phải nêu rõ: *công cụ phân tích kỹ thuật, không phải tư vấn đầu tư, không bảo đảm lợi nhuận, futures có thể mất toàn bộ vốn*. Không dùng cụm từ hứa hẹn lợi nhuận ("lãi x%", "thắng 90%"), không dùng tên/logo sàn trong tên app hay icon.
-- **App content / Data safety / Financial features declaration:** khai đúng sự thật theo bản bạn phát hành. Bản không thu phí và không có backend: app không thu thập dữ liệu cá nhân (dữ liệu nằm trên thiết bị, chỉ gọi API công khai của Binance). Bản có Billing + Worker: khai dữ liệu giao dịch Worker lưu. Form phải khớp bản đang phát hành.
+- **App content / Data safety / Financial features declaration:** khai đúng sự thật theo bản bạn phát hành. Bản không thu phí và không có backend: app không có tài khoản và không có máy chủ riêng, dữ liệu nằm trên thiết bị, chỉ gọi API công khai của Binance; nhưng Binance và nhà cung cấp hosting vẫn thấy địa chỉ IP người dùng nên hãy cân nhắc kỹ cách khai (Google có thể coi địa chỉ IP gửi tới bên thứ ba là dữ liệu cần khai; hãy đối chiếu định nghĩa hiện hành trên Play Console). Bản có Billing + Worker: khai Purchase history **và** Device or other IDs (Worker lưu mã thiết bị ngẫu nhiên, băm và bản mã hoá của mã giao dịch, gói, trạng thái, hạn). Form phải khớp bản đang phát hành.
 - Thử theo thứ tự: Internal testing → (Closed testing nếu tài khoản của bạn yêu cầu) → Production.
 
 ## 5. Thu phí
 
 - Bán tính năng số **trong app trên Google Play** phải qua **Google Play Billing**; không dẫn người dùng ra ngoài để thanh toán cho tính năng đó. Đọc chính sách Payments của Google Play.
-- Khung kỹ thuật có sẵn trong gói (nếu có `billing.js` và `worker/`): xem `docs/INSTALL.md` mục 6. Luồng chung: app (TWA) dùng Digital Goods API + Payment Request → nhận `purchaseToken` → Worker xác minh với Google Play Developer API, acknowledge và lưu quyền lợi → app hỏi Worker khi mở để mở/khoá tính năng. Phần Pro phải được backend kiểm tra, không chỉ ẩn bằng giao diện (web công khai).
+- Thư viện và backend có kèm trong gói (nếu có `billing.js` và `worker/`) **nhưng chưa nối vào giao diện**: không có màn hình mua gói, `billing.js` không được `index.html` nạp, Worker chưa triển khai. Xem `docs/INSTALL.md` mục 6. Luồng chung: app (TWA) dùng Digital Goods API + Payment Request → nhận `purchaseToken` → Worker xác minh với Google Play Developer API, acknowledge và lưu quyền lợi → app hỏi Worker khi mở để mở/khoá tính năng. Phần Pro phải được backend kiểm tra, không chỉ ẩn bằng giao diện (web công khai).
 - Mô hình thay thế không thu phí trong app: miễn phí + liên kết giới thiệu của chính bạn. Đọc kỹ điều khoản chương trình đó và chính sách nội dung tài chính của Google Play.
 
 ## 6. Việc người mua phải tự chịu trách nhiệm

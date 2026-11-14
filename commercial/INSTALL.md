@@ -15,6 +15,7 @@ Tìm toàn bộ bằng lệnh (Linux/macOS/Git Bash): `grep -rn "{{" . --include
 
 Ghi chú:
 - Ứng dụng chạy được dùng **đường dẫn tương đối**, nên chạy ở bất kỳ tên miền nào mà không cần điền `{{DOMAIN}}`. `{{DOMAIN}}` chỉ cần cho phần đóng gói Android và backend thanh toán.
+- `privacy.html` mục 2 nêu hosting là "Cloudflare Pages" và mục 4 có chỗ `[SỐ NGÀY]` (thời hạn giữ dữ liệu thanh toán, chỉ áp dụng khi bạn bật gói trả phí): **đổi theo nhà cung cấp hosting bạn dùng** và điền thời hạn nếu bật thanh toán. Câu "không bật công cụ phân tích truy cập bổ sung" chỉ đúng nếu bạn thật sự không bật Web Analytics/Logpush ở host của mình.
 - `privacy.html` và `terms.html` là **mẫu**. Đọc kỹ, chỉnh theo thực tế sản phẩm của bạn (có thu phí hay không, có backend hay không) và nhờ luật sư soát trước khi công bố. Bản này viết cho trường hợp "không tài khoản, không máy chủ, dữ liệu nằm trên thiết bị".
 - Tệp `LICENSE.md`, `docs/`, `tests/`, `tools/`, `worker/` nằm cùng thư mục gốc và sẽ bị xuất bản công khai nếu bạn deploy nguyên thư mục. Không có bí mật nào trong các tệp này, nhưng bạn nên **xoá** `LICENSE.md`, `CHANGELOG.md`, `docs/`, `tests/`, `tools/`, `worker/`, `play-assets/` và `package.json` khỏi bản deploy (cất bản đầy đủ ở nơi riêng tư) để gọn và không lộ tài liệu bán hàng. Đừng xoá `.well-known/`, `icons/`, `_headers`, `_redirects`.
 
@@ -117,7 +118,8 @@ Mặc định **không bật thanh toán** (`twa-manifest.json`: `features.playB
 - Nếu gói có `worker/README.md`: làm theo đó để triển khai Cloudflare Worker (`worker/src/index.js`, `worker/wrangler.toml`: tạo KV, đặt bí mật `GOOGLE_SA_JSON`, `RTDN_KEY`, điền `{{DOMAIN}}` ở `ALLOWED_ORIGINS`), rồi `npx wrangler deploy`.
 - Nếu gói có `billing.js`: mở tệp, đặt `API_BASE` thành URL Worker của bạn (`https://<tên-worker>.<subdomain>.workers.dev`), đối chiếu `skus` với mã sản phẩm bạn tạo trong Play Console; đảm bảo `index.html` nạp `billing.js` trước `app.js` (thêm `<script src="billing.js"></script>` nếu chưa có) và `billing.js` có trong mảng `ASSETS` của `sw.js`.
 - Đặt `features.playBilling.enabled = true` trong `twa-manifest.json` rồi build lại gói Android.
-- Cập nhật `privacy.html` (khai báo dữ liệu giao dịch Worker lưu), `docs/play/LISTING.md` và mục "Data safety" trên Play Console **trước khi** phát hành bản có thu phí.
+- Gói **chưa nối `billing.js` và Worker vào giao diện**: bạn cần tự thêm màn hình mua gói/khoá tính năng, nạp `billing.js` và triển khai Worker; Worker hiện chưa có lệnh xoá dữ liệu và chưa đặt hạn lưu, hãy bổ sung trước khi hứa "có thể yêu cầu xoá".
+- Cập nhật `privacy.html` mục 4 (đã có mẫu danh sách dữ liệu Worker lưu: mã thiết bị ngẫu nhiên, băm và bản mã hoá của mã giao dịch, gói, trạng thái, hạn), `docs/play/LISTING.md` và mục "Data safety" trên Play Console (khai Purchase history **và** Device or other IDs) **trước khi** phát hành bản có thu phí.
 - Nếu gói của bạn **không có** `worker/` hoặc `billing.js`, bỏ qua mục này: sản phẩm vẫn chạy đầy đủ như app miễn phí hoặc bạn tự tích hợp hệ thống thu phí khác.
 
 ## 7. Chạy test

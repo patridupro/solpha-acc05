@@ -373,3 +373,15 @@ footer a { color: var(--brand); text-decoration: none; }
 .modal-card ul { padding-left: 18px; margin: 8px 0 14px; line-height: 1.55; font-size: 14px; }
 .modal-card a { color: var(--brand); }
 .modal-card .btn { width: 100%; padding: 12px; }
+/* Khung lỗi mạng Binance + chi tiết kỹ thuật thu gọn */
+.act.err .act-side { font-size: 20px; line-height: 1.25; }
+.act.err .act-sub { font-weight: 500; line-height: 1.5; flex-basis: 100%; }
+.act-err { margin-top: 10px; display: grid; gap: 8px; }
+.act-retry { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
+.act-retry b { color: var(--text); }
+.tech { font-size: 12px; color: var(--muted); }
+.tech summary { cursor: pointer; padding: 2px 0; }
+.tech pre { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 1.5; max-height: 140px; overflow: auto; }
+.act-foot2 { margin-top: 2px; font-size: 11px; color: var(--muted); }
+.btwarn { font-size: 12px; margin: 6px 0; }
+.rpwrap, .btbox .table-wrap { max-width: 100%; }

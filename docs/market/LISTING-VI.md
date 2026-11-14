@@ -1,6 +1,6 @@
 # SOLPHA Futures Desk — Nội dung listing (tiếng Việt, sẵn dán)
 
-Phiên bản 1.0.0 · soạn 13/11/2026. Dùng cho trang bán ở Việt Nam (website riêng, nhóm cộng đồng nhà phát triển, Payhip/Gumroad bản tiếng Việt). Thay mọi `[PLACEHOLDER]` trước khi đăng. **Không xoá các cảnh báo** để "tăng chuyển đổi".
+Phiên bản 1.0.0 · soạn 13/11/2026 · sửa 14/11/2026 sau kiểm toán tuân thủ (backtest = khoảng 5 ngày, tối ưu = 30 ngày; Cài đặt chỉ có công tắc bật/tắt; câu chữ về Android và billing). Dùng cho trang bán ở Việt Nam (website riêng, nhóm cộng đồng nhà phát triển, Payhip/Gumroad bản tiếng Việt). Thay mọi `[PLACEHOLDER]` trước khi đăng. **Không xoá các cảnh báo** để "tăng chuyển đổi". Trước khi đăng: chạy lại test Worker (`node --test worker/test`) và sửa con số "39 test" nếu khác (kiểm toán chưa chạy lại).
 
 Nguyên tắc của bản này (đừng phá khi chỉnh sửa):
 - Không hứa hoặc ám chỉ lợi nhuận, tỷ lệ thắng, "chính xác". Không đăng ảnh lãi/lỗ.
@@ -43,7 +43,7 @@ Bạn nhận toàn bộ mã nguồn đọc được, tự đặt lên hosting c�
 
 ĐỌC TRƯỚC KHI MUA
 - Đây là MÃ NGUỒN PHẦN MỀM. Không phải tư vấn đầu tư, không phải dịch vụ tín hiệu, không phải bot giao dịch. App không đặt lệnh và không yêu cầu API key sàn.
-- Không có bất kỳ cam kết hay ám chỉ nào về lợi nhuận, tỷ lệ thắng hay hiệu quả. Giao dịch futures rủi ro cao, bạn có thể mất toàn bộ vốn. Backtest trong app là mô phỏng đơn giản trên dữ liệu công khai gần đây (khoảng 30 ngày), không chứng minh kết quả tương lai.
+- Không có bất kỳ cam kết hay ám chỉ nào về lợi nhuận, tỷ lệ thắng hay hiệu quả. Giao dịch futures rủi ro cao, bạn có thể mất toàn bộ vốn. Backtest (khoảng 5 ngày) và công cụ tối ưu (30 ngày) trong app là mô phỏng nhỏ, đơn giản trên dữ liệu công khai gần đây, không chứng minh kết quả tương lai.
 - Các "tín hiệu" hiển thị là kết quả của quy tắc cố định, có tài liệu, áp lên dữ liệu giá công khai. Không đảm bảo đúng, và gói này không kèm tín hiệu nào.
 - Bạn phải tự triển khai và cấu hình. Cần kiến thức hosting web cơ bản; phần Android/Play Billing cần nhiều hơn.
 - Giao diện và phần lớn tài liệu bằng tiếng Việt.
@@ -60,31 +60,31 @@ Chỉ báo và đa khung
 
 Bộ máy quy tắc nến (signals.js, dùng chung cho quét trực tiếp và backtest)
 - Long A (hồi về trung bình) và B (bứt phá sau nén); Short S1/S2/S3; chế độ Short điều chỉnh khi ngược khung 1D; chế độ Momentum 4H/1H.
-- Mọi thông số chỉnh trong Cài đặt, riêng từng cặp. App tự quét khi mỗi nến 5 phút đóng, cho tất cả các cặp.
+- Từng quy tắc bật/tắt riêng cho từng cặp trong Cài đặt; các ngưỡng số là tham số trong signals.js (DEFAULTS), bạn sửa bằng cách chỉnh mã nguồn. App tự quét khi mỗi nến 5 phút đóng, cho tất cả các cặp.
 
 Kế hoạch vào lệnh
-- Chia 3 phần giá vào, stop-loss, TP1/TP2 và khối lượng theo vốn và % rủi ro bạn nhập. Bỏ qua khi rủi ro vượt giới hạn ATR bạn đặt.
+- Chia 3 phần giá vào, stop-loss, TP1/TP2 và khối lượng theo vốn và % rủi ro bạn nhập. Bỏ qua khi rủi ro vượt giới hạn ATR cài sẵn (tham số trong signals.js).
 
 Backtest, Tối ưu 30 ngày, Soi lại
-- Backtest từng bộ điều kiện trên khoảng 1.500 nến 5M thật, tách Long/Short và từng setup, kèm lý do bị loại nhiều nhất.
-- Tối ưu 30 ngày: tải 30 ngày dữ liệu công khai ngay trên trình duyệt, đo từng điều kiện sau phí và trượt giá, cho xem nửa đầu và nửa sau để kiểm tra độ ổn định, rồi cho bạn giữ lại các điều kiện đạt ngưỡng.
+- Backtest từng bộ điều kiện trên khoảng 1.500 nến 5M thật (khoảng 5 ngày), tách Long/Short và từng setup, kèm lý do bị loại nhiều nhất.
+- Tối ưu 30 ngày: tải 30 ngày dữ liệu công khai ngay trên trình duyệt, đo từng điều kiện sau phí và trượt giá, cho xem nửa đầu và nửa sau để kiểm tra độ ổn định, rồi cho bạn chỉ bật lại các điều kiện đủ ngưỡng cài sẵn (số lệnh mô phỏng tối thiểu, tỷ lệ lệnh có lãi tối thiểu, R trung bình dương; các giá trị là hằng số trong mã nguồn, bạn sửa được).
 - Soi lại: liệt kê từng nến 5M quanh thời điểm bạn chọn cùng quyết định và lý do.
 - Tất cả chạy cục bộ. Mẫu nhỏ, giả định đơn giản: dùng để hiểu quy tắc, không phải bằng chứng hiệu quả.
 
-Nhật ký giao dịch có chấm điểm kỷ luật
-- Chấm 5 tiêu chí có trọng số mỗi ngày (kỷ luật theo chỉ báo, setup đúng, quản trị rủi ro, chia nhỏ lệnh, không FOMO), xếp hạng A–D, tổng kết tháng, chuỗi kỷ luật dài nhất, xuất CSV, sao lưu/khôi phục JSON. Dữ liệu lưu cục bộ trên thiết bị.
+Nhật ký giao dịch có checklist tự đánh giá
+- Checklist tự đánh giá hằng ngày với các tiêu chí có trọng số, xếp hạng A–D (điểm do bạn tự chấm, không phải thước đo hiệu quả), tổng kết tháng, chuỗi dài nhất, xuất CSV, sao lưu/khôi phục JSON. Dữ liệu lưu cục bộ trên thiết bị.
 
 Thông báo
 - Thông báo cục bộ qua service worker, nút gửi thông báo thử, quét bù 90 phút khi mở lại app, tuỳ chọn giữ màn hình sáng. Thông báo tạo ngay trên thiết bị; không có máy chủ đẩy thông báo.
 
 PWA và Android
 - Manifest, service worker có offline fallback, nút cài app, icon maskable.
-- Cấu hình Trusted Web Activity sẵn (twa-manifest.json, dùng với Bubblewrap hoặc PWABuilder), ảnh đồ hoạ cho Google Play, bản nháp listing và bản nháp trả lời câu hỏi chính sách.
+- Cấu hình đóng gói Android (Trusted Web Activity, twa-manifest.json, dùng với Bubblewrap hoặc PWABuilder), ảnh đồ hoạ cho Google Play, bản nháp listing và bản nháp trả lời câu hỏi chính sách. Không kèm bản build đã ký: bạn tự build, ký, điền dấu vân tay Digital Asset Links và gửi duyệt.
 
 Backend Google Play Billing (tuỳ chọn, cho gói đăng ký)
 - Cloudflare Worker xác minh giao dịch đăng ký Google Play qua Google Play Developer API, acknowledge giao dịch, lưu quyền lợi trong Workers KV, nhận Real-time Developer Notifications (Pub/Sub). Không phụ thuộc npm. Có 39 test tự động.
 - Thư viện client billing.js cho luồng Digital Goods API / Payment Request trong TWA.
-- CHƯA nối sẵn: các màn hình trong app chưa có màn hình mua gói hoàn chỉnh hay khoá tính năng. Worker và thư viện client đã có và có tài liệu; bạn tự nối vào màn hình thanh toán của mình.
+- CHƯA nối vào giao diện: backend và thư viện Play Billing có kèm theo, nhưng billing.js không được index.html nạp, Worker chưa triển khai (API_BASE là chỗ trống) và các màn hình trong app chưa có màn hình mua gói hay khoá tính năng. Đã có tài liệu; bạn tự tích hợp vào màn hình mua gói của mình.
 
 Kiểm thử
 - node tests/signals.test.js kiểm tra bộ máy quy tắc; Worker có bộ test riêng (39 test).
@@ -95,7 +95,7 @@ YÊU CẦU
 - Node.js 18+ chỉ cần nếu muốn chạy test hoặc tạo lại icon.
 - Cho Android: tài khoản Google Play Developer (phí đăng ký và yêu cầu thử nghiệm của Google áp dụng và có thể thay đổi), cộng Bubblewrap hoặc PWABuilder.
 - Cho gói đăng ký: dự án Google Cloud có service account, sản phẩm đăng ký trong Play Console, tài khoản Cloudflare (gói miễn phí đủ cho quy mô nhỏ).
-- Truy cập được endpoint công khai của Binance. Người dùng ở vùng Binance chặn sẽ không nhận được dữ liệu. IP người dùng hiển thị với Binance như mọi trang web gọi API công khai.
+- Phông Roboto được đóng gói sẵn trong gói (tự lưu trữ), app không gọi Google Fonts. Truy cập được endpoint công khai của Binance. Người dùng ở vùng Binance chặn sẽ không nhận được dữ liệu. IP người dùng hiển thị với Binance như mọi trang web gọi API công khai.
 - Bạn tự chịu trách nhiệm kiểm tra điều khoản hiện hành của Binance về việc dùng dữ liệu thị trường công khai cho mục đích của mình, cũng như quy định pháp luật và thuế ở nước bạn.
 
 TRONG GÓI CÓ GÌ
@@ -111,7 +111,7 @@ KHÔNG CÓ TRONG GÓI
 - Không kèm tín hiệu giao dịch, số liệu hiệu quả, "lợi thế chiến lược" hay bất kỳ bảo đảm nào.
 - Không đặt lệnh, không xử lý API key sàn.
 - Không có cảnh báo 24/7 từ máy chủ: app chỉ quét khi đang chạy; Android có thể đóng băng web app khi tắt màn hình. Máy chủ quét giá và đẩy thông báo (Telegram/Web Push) không có.
-- Không có màn hình mua gói và khoá tính năng hoàn chỉnh (xem trên).
+- Không có màn hình mua gói và khoá tính năng hoàn chỉnh, thư viện billing chưa nối vào giao diện (xem trên).
 - Không có bản dịch giao diện; giao diện tiếng Việt.
 - Không có văn bản pháp lý riêng cho bạn. Trang quyền riêng tư và điều khoản là mẫu có chỗ trống; bạn phải điền và nhờ người có chuyên môn rà soát.
 
@@ -142,7 +142,7 @@ Không dùng tag: "tín hiệu", "lợi nhuận", "thu nhập thụ động", "t
 Không. Đây là mã nguồn của một bảng phân tích. App hiển thị chỉ báo và áp quy tắc cố định, có tài liệu, lên dữ liệu giá công khai. App không đặt lệnh, không kết nối tài khoản sàn và không xin API key. Không bán hay bảo đảm tín hiệu nào.
 
 2. Dùng nó có lời không?
-Không có cam kết nào, và không thể có. Giao dịch futures rủi ro cao, bạn có thể mất toàn bộ vốn. Backtest chỉ là mô phỏng nhỏ, đơn giản trên khoảng 30 ngày dữ liệu, không chứng minh kết quả tương lai. Hãy mua vì mã nguồn và giá trị làm công cụ/học tập, không vì kỳ vọng lợi nhuận.
+Không có cam kết nào, và không thể có. Giao dịch futures rủi ro cao, bạn có thể mất toàn bộ vốn. Backtest (khoảng 5 ngày) và công cụ tối ưu 30 ngày chỉ là mô phỏng nhỏ, đơn giản, không chứng minh kết quả tương lai. Hãy mua vì mã nguồn và giá trị làm công cụ/học tập, không vì kỳ vọng lợi nhuận.
 
 3. Có cần máy chủ hay backend không?
 App thì không: đó là site tĩnh. Chỉ cần backend (Cloudflare Worker đi kèm) khi bạn muốn bán gói đăng ký qua Google Play Billing. Worker chạy được trên gói miễn phí của Cloudflare ở quy mô nhỏ.
@@ -171,14 +171,14 @@ v1.0.0 (13/11/2026) — bản mã nguồn công khai đầu tiên
 - Chỉ báo EMA/BB/RSI/ATR/MACD trên 5M, 15M, 1H, 4H, 1D.
 - Bộ quy tắc nến: Long A/B, Short S1/S2/S3, Short điều chỉnh, Momentum 4H/1H; cài đặt riêng từng cặp.
 - Kế hoạch vào lệnh (3 phần, SL, TP1/TP2, khối lượng theo rủi ro).
-- Backtest, Tối ưu 30 ngày (trừ phí + trượt giá), Soi lại.
-- Nhật ký giao dịch chấm điểm kỷ luật có trọng số, tổng kết tháng, xuất CSV/JSON.
+- Backtest (khoảng 5 ngày), Tối ưu 30 ngày (trừ phí và trượt giá ước tính), Soi lại.
+- Nhật ký giao dịch có checklist tự đánh giá có trọng số, tổng kết tháng, xuất CSV/JSON.
 - Thông báo cục bộ, quét bù, cài như PWA.
-- Cấu hình Android TWA, ảnh Google Play, bản nháp listing và chính sách.
-- Cloudflare Worker xác minh gói đăng ký Google Play (acknowledge, quyền lợi trong KV, RTDN), thư viện billing.js, 39 test tự động.
+- Cấu hình đóng gói Android TWA (bạn tự build và ký), ảnh Google Play, bản nháp listing và chính sách.
+- Cloudflare Worker xác minh gói đăng ký Google Play (acknowledge, quyền lợi trong KV, RTDN) và thư viện billing.js, có kèm nhưng chưa nối vào giao diện; 39 test tự động (chạy lại trước khi đăng).
 - Giao diện tối thương hiệu SOLPHA (tiếng Việt).
 
-Giới hạn đã biết ở 1.0.0: chưa có cảnh báo từ máy chủ; chưa nối sẵn màn hình mua gói Play Billing; giao diện chỉ tiếng Việt.
+Giới hạn đã biết ở 1.0.0: chưa có cảnh báo từ máy chủ; thư viện billing và Worker chưa nối vào giao diện (chưa có màn hình mua gói); không kèm bản Android đã ký; giao diện chỉ tiếng Việt.
 ```
 
 ## 7. Biến thể giá (khớp PRICING.md)
@@ -193,6 +193,6 @@ Giới hạn đã biết ở 1.0.0: chưa có cảnh báo từ máy chủ; chưa
 ## 8. Ghi chú ảnh và video
 
 - Ảnh đầu: ảnh chụp thật của app (giao diện tối), chỉ kèm tên sản phẩm. Không số lãi/lỗ, không logo sàn.
-- Nên có: tab các cặp, bảng chỉ báo, kế hoạch lệnh (vốn mẫu ghi rõ), backtest, điểm nhật ký.
+- Nên có: tab các cặp, bảng chỉ báo, kế hoạch tham khảo (vốn mẫu ghi rõ), công cụ mô phỏng ở trạng thái chưa chạy, form nhật ký. Không đưa bảng kết quả backtest/tối ưu (cột % lệnh có lãi, cột đủ ngưỡng) và điểm nhật ký vào ảnh.
 - Chữ chèn được phép: "Mã nguồn", "Tự lưu trữ", "PWA", "Bộ Android TWA", "Cloudflare Worker". Không dùng: "lợi nhuận", "tỷ lệ thắng", "chính xác", "tín hiệu".
 - Chú thích dưới ảnh: "Ảnh chụp dùng dữ liệu mẫu. Không phải tư vấn đầu tư."

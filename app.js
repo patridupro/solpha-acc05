@@ -129,24 +129,85 @@ async function fetchJSON(url, ms = 6000, retry = true) {
     throw e;
   } finally { clearTimeout(to); }
 }
-async function withBase(pathSpot, pathFutures, ms) {
+// ---- Mạng Binance: chẩn đoán lỗi + bộ ngắt mạch (không "dội" request khi bị chặn khu vực / mất mạng) ----
+// Trình duyệt thường chỉ báo "Failed to fetch" (CORS, không có mã 451) nên phải tự phân biệt: offline / máy chủ app vẫn tới được nhưng Binance thì không.
+const NET_DELAYS = [15, 30, 60, 120, 300]; // giây chờ trước lần thử kế tiếp, theo số vòng lỗi hoàn toàn liên tiếp
+const net = { fails: 0, until: 0, lease: 0, okAt: 0, force: 0, kind: null, errs: "", lastTry: 0, logged: false };
+const isNetErr = (m) => !/^(400|404) /.test(m); // 400/404 = tới được Binance nhưng yêu cầu sai (ví dụ mã cặp không có) → không phải lỗi mạng
+function netPausedError() { const e = new Error("tạm dừng thử lại (bộ ngắt mạch)"); e.paused = true; e.netFail = true; return e; }
+function netGate() {
+  if (!net.fails || net.force) return;
+  const n = Date.now();
+  if (n < net.until || n < net.lease) throw netPausedError(); // đang ngắt mạch hoặc đã có một lần thử đang chạy
+  net.lease = n + 25000; // chỉ cho MỘT lần thử qua cổng tại một thời điểm
+}
+function netOk() { const was = net.fails; net.fails = 0; net.until = net.lease = 0; net.okAt = Date.now(); net.kind = null; net.errs = ""; if (was) { retryCount = 0; renderNetState(); } }
+function netDown(errs) {
+  const n = Date.now();
+  net.lease = 0; net.errs = errs;
+  if (net.fails && n < net.until) return; // nhiều yêu cầu cùng lỗi một lúc chỉ tính một vòng
+  if (net.force && net.fails) { net.until = n + NET_DELAYS[Math.min(net.fails, NET_DELAYS.length) - 1] * 1000; return; } // bấm tay không leo thang
+  net.fails++; net.until = n + NET_DELAYS[Math.min(net.fails, NET_DELAYS.length) - 1] * 1000;
+  net.kind = null;
+  diagnoseNet(errs).then((k) => { net.kind = k; renderNetState(); });
+}
+// offline | geo (451/403) | blocked (máy chủ app tới được, Binance thì không) | slow (chỉ hết giờ) | net (cả máy chủ app cũng không tới được)
+async function diagnoseNet(errs) {
+  if (navigator.onLine === false) return "offline";
+  if (/\b(451|403)\b/.test(errs)) return "geo";
+  let same = false;
+  try { const r = await fetch("./manifest-solpha.webmanifest?_probe=" + Date.now(), { method: "HEAD", cache: "no-store" }); same = r.ok; } catch (_) {} // HEAD không đi qua service worker → phản ánh mạng thật
+  if (!same) return navigator.onLine === false ? "offline" : "net";
+  return /quá \d+ giây/.test(errs) && !/Failed to fetch|NetworkError|Load failed/i.test(errs) ? "slow" : "blocked";
+}
+const NET_MSG = {
+  offline: ["Thiết bị đang offline", "Kiểm tra Wi-Fi/4G. App sẽ tự thử lại khi có mạng."],
+  geo: ["Binance không phục vụ mạng này", "Binance chặn một số khu vực/IP (ví dụ Mỹ). Thử đổi mạng (4G/Wi-Fi khác) hoặc VPN."],
+  blocked: ["Chưa có dữ liệu Binance", "Không tải được dữ liệu từ Binance trên mạng này (Binance chặn một số khu vực như Mỹ). Thử mạng khác hoặc VPN."],
+  slow: ["Binance phản hồi quá chậm", "Mạng chậm hoặc không ổn định nên Binance không trả lời kịp. Thử mạng khác."],
+  net: ["Mất kết nối mạng", "Không tới được cả máy chủ của app. Kiểm tra Wi-Fi/4G."],
+  unknown: ["Mất kết nối dữ liệu", "Mạng chậm hoặc app vừa chạy nền · đang tự thử lại…"]
+};
+function netMsg(raw) {
+  if (/\b(451|403)\b/.test(raw || "")) return NET_MSG.geo;
+  if (navigator.onLine === false) return NET_MSG.offline;
+  return NET_MSG[net.kind] || NET_MSG.unknown;
+}
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+// Lỗi hiện ra ngoài tab Công cụ: câu thân thiện, không in chuỗi thô của trình duyệt.
+function friendlyErr(e) { const m = String((e && e.message) || e); return /Failed to fetch|NetworkError|Load failed|tạm dừng|\b(451|403)\b|quá \d+ giây/.test(m) ? netMsg(m)[1] : m; }
+function netBoxHtml(raw) {
+  const [title, sub] = netMsg(raw), wait = net.fails ? Math.max(0, Math.ceil((net.until - Date.now()) / 1000)) : 0;
+  return `<div class="act-h"><span class="act-side">${title}</span><span class="act-sub">${sub}</span></div>
+    <div class="act-err"><span class="act-retry">${net.fails ? `Tự thử lại sau <b id="retryIn">${wait}</b>s · ` : ""}<button type="button" id="btnRetryNow" class="btn ghost sm">Thử lại ngay</button></span>
+    <details class="tech"><summary>Chi tiết kỹ thuật</summary><pre>${esc(raw || net.errs || "—")}</pre></details></div>`;
+}
+function renderNetState() { const st = stOf(active); if (!st.map) renderPair(active); }
+async function withBase(pathSpot, pathFutures, ms, opt = {}) {
+  if (!opt.manual) netGate(); // thao tác tay của người dùng (Backtest, Tối ưu, Soi lại, Thêm cặp) luôn được thử, không bị ngắt mạch chặn
   const errors = [];
   for (const base of ENDPOINTS) {
     const futures = base.includes("fapi");
+    if (opt.futuresOnly && !futures) continue;
     const path = futures ? pathFutures : pathSpot;
     try {
       const data = await fetchJSON(base + path, ms);
+      netOk();
       return { data, source: futures ? "Binance Futures" : "Binance Spot" };
-    } catch (e) { errors.push(String(e.message || e)); }
+    } catch (e) { errors.push(base.replace("https://", "") + " → " + String(e.message || e)); }
   }
-  throw new Error(errors.join(" | "));
+  const err = new Error(errors.join(" | "));
+  err.netFail = errors.every((m) => isNetErr(m.split(" → ")[1] || m));
+  if (err.netFail && opt.report !== false && !opt.manual) netDown(err.message);
+  throw err;
 }
-async function loadTicker(sym) {
-  // Giá 24h và mark/funding lấy song song; mark/funding lỗi thì bỏ qua, không kéo chậm giá.
-  const prem = withBase(`/fapi/v1/premiumIndex?symbol=${sym}`, `/fapi/v1/premiumIndex?symbol=${sym}`).then((x) => x.data, () => null);
-  const { data, source } = await withBase(`/api/v3/ticker/24hr?symbol=${sym}`, `/fapi/v1/ticker/24hr?symbol=${sym}`);
+async function loadTicker(sym, manual) {
+  // Giá 24h và mark/funding lấy song song khi mạng đã biết là ổn; chưa biết (mới mở / vừa lỗi) thì chạy lần lượt để không nhân đôi số yêu cầu lỗi.
+  const prem = () => withBase(`/fapi/v1/premiumIndex?symbol=${sym}`, `/fapi/v1/premiumIndex?symbol=${sym}`, undefined, { futuresOnly: true, report: false }).then((x) => x.data, () => null);
+  const early = net.fails === 0 && net.okAt > 0 ? prem() : null;
+  const { data, source } = await withBase(`/api/v3/ticker/24hr?symbol=${sym}`, `/fapi/v1/ticker/24hr?symbol=${sym}`, undefined, { manual });
   const t = { last: Number(data.lastPrice), mark: Number(data.lastPrice), chg: Number(data.priceChangePercent), high: Number(data.highPrice), low: Number(data.lowPrice), source, funding: null };
-  const d2 = await Promise.race([prem, new Promise((r) => setTimeout(() => r(null), 2000))]);
+  const d2 = await Promise.race([early || prem(), new Promise((r) => setTimeout(() => r(null), 2000))]);
   if (d2 && d2.markPrice) t.mark = Number(d2.markPrice);
   if (d2 && d2.lastFundingRate != null) t.funding = Number(d2.lastFundingRate);
   return t;
@@ -169,13 +230,13 @@ function renderUpdated(st) {
   const scan = st.scanAt ? ` · quét ${hms(st.scanAt).slice(0, 5)}` : "";
   $("updated").textContent = st.tickerAt ? `${wsOk() ? "⚡ " : "giá "}${hms(st.tickerAt)}${scan}` : st.updated || "—";
 }
-async function loadKlinesUntil(sym, interval, limit, endTime) {
+async function loadKlinesUntil(sym, interval, limit, endTime) { // chỉ dùng cho công cụ do người dùng bấm
   const q = `symbol=${sym}&interval=${interval}&limit=${limit}&endTime=${endTime}`;
-  const { data } = await withBase(`/api/v3/klines?${q.replace(`limit=${limit}`, `limit=${Math.min(limit, 1000)}`)}`, `/fapi/v1/klines?${q}`, 15000);
+  const { data } = await withBase(`/api/v3/klines?${q.replace(`limit=${limit}`, `limit=${Math.min(limit, 1000)}`)}`, `/fapi/v1/klines?${q}`, 15000, { manual: true });
   return data.map((k) => ({ t: k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5] }));
 }
-async function loadKlines(sym, interval, limit = 220) {
-  const { data } = await withBase(`/api/v3/klines?symbol=${sym}&interval=${interval}&limit=${Math.min(limit, 1000)}`, `/fapi/v1/klines?symbol=${sym}&interval=${interval}&limit=${limit}`, 12000); // nến nặng hơn giá → chờ lâu hơn
+async function loadKlines(sym, interval, limit = 220, manual = false) {
+  const { data } = await withBase(`/api/v3/klines?symbol=${sym}&interval=${interval}&limit=${Math.min(limit, 1000)}`, `/fapi/v1/klines?symbol=${sym}&interval=${interval}&limit=${limit}`, 12000, { manual }); // nến nặng hơn giá → chờ lâu hơn
   return data.map((k) => ({ t: k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5] }));
 }
 function analyze(candles) {
@@ -253,7 +314,7 @@ function renderTrigger(trig, sym = active) {
   $("trigText").textContent = hit && hit.engine === "m4h" ? `${hit.side.toUpperCase()} MOMENTUM 4H/1H · 5M+15M chạm ${hit.side === "long" ? "BB trên" : "BB dưới"} (½ khối lượng)`
     : hit ? `${hit.side.toUpperCase()}${hit.corrective ? " ĐIỀU CHỈNH" : ""} · Setup ${hit.setup} · ${hit.label}${hit.momentum ? " · Momentum (½ khối lượng)" : ""}` : "Chưa có nến tín hiệu mới";
   // Lý do hiển thị ngay dưới tiêu đề (trên điện thoại cột Ghi chú nằm khuất bên phải bảng).
-  const heldTxt = held ? `<div class="held ${held.x.side}">Đang giữ kế hoạch <b>${held.x.side.toUpperCase()} ${held.x.engine === "m4h" ? "M4H" : held.x.setup}</b> từ nến ${held.x.label} lúc ${hmVN(held.x.t)} — xem ô hành động phía trên.</div>` : "";
+  const heldTxt = held ? `<div class="held ${held.x.side}">Kế hoạch tham khảo còn hiệu lực: <b>${held.x.side.toUpperCase()} ${held.x.engine === "m4h" ? "M4H" : held.x.setup}</b> từ nến ${held.x.label} lúc ${hmVN(held.x.t)} — xem ô phía trên.</div>` : "";
   $("trigWhy").innerHTML = hit ? "" : heldTxt + trig.map((x) => `<div><b>${x.label}</b>: ${x.why.join(" · ") || "—"}</div>`).join("");
   $("trigBody").innerHTML = trig.map((x) => {
     const time = new Date(x.t).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" });
@@ -261,7 +322,7 @@ function renderTrigger(trig, sym = active) {
     return `<tr><td><b>${x.label}</b> ${time}</td><td>${fp(x.o)} → ${fp(x.c)}</td><td>${fp(x.range)}${x.atrMult ? ` (${fmt(x.atrMult, 1)}×ATR)` : ""}</td><td>${x.volMult ? fmt(x.volMult, 1) + "×" : "—"}</td><td>${x.pos != null ? Math.round(x.pos * 100) + "%" : "—"}</td><td>${sig}</td><td class="muted">${x.side ? "Đủ điều kiện" : x.why.join(" · ") || "—"}</td></tr>`;
   }).join("");
 }
-// Ô Ưu tiên: kế hoạch lệnh của tín hiệu gần nhất (giữ 30 phút), lưu riêng từng cặp.
+// Ô Trạng thái điều kiện: kế hoạch tham khảo của tín hiệu gần nhất (giữ 30 phút), lưu riêng từng cặp.
 function planText(x, sym) {
   const coin = baseOf(sym), p = x.plan, acct = Number(store.get("solpha_acct", "0")), riskPct = Number(store.get("solpha_risk", "1")) * (p.sizeFactor || 1);
   const riskUsd = acct * riskPct / 100, qty = riskUsd && p.risk ? riskUsd / p.risk : 0;
@@ -269,14 +330,14 @@ function planText(x, sym) {
     head: `${coin} · ` + (p.momentum4h ? `${x.side === "long" ? "LONG" : "SHORT"} MOMENTUM 4H/1H · 5M+15M chạm ${x.side === "long" ? "BB trên" : "BB dưới"} · ½ khối lượng${x.d1Against ? " · ⚠ ngược 1D" : ""}`
       : `${x.side === "long" ? "LONG" : "SHORT"}${p.corrective ? " ĐIỀU CHỈNH" : ""} · Setup ${x.setup} · ${x.label}${(p.sizeFactor || 1) < 1 ? " · ½ khối lượng" : ""}`),
     lines: [
-      `Vào 3 phần: ${p.entries.map((e) => fp(e)).join(" / ")} (TB ${fp(p.entry)})`,
-      `SL: ${fp(p.sl)} (rủi ro ${fp(p.risk)}/${coin})`,
-      `TP1: ${fp(p.tp1)} (R:R 1:${fmt(p.rr1, 1)}) → ${p.partialTP1 ? "chốt ½, " : ""}dời SL về giá vào`,
-      p.tp2Merged ? `TP2: = TP1 (${p.tp2Merged} chặn ngay sau TP1 → chốt hết)` : `TP2: ${fp(p.tp2)} (R:R 1:${fmt(p.rr2, 1)})`,
-      qty ? `Khối lượng: ${fmtQty(qty)} ${coin} ≈ $${fmt(qty * p.entry, 0)} · đòn bẩy ≈ ${fmt(qty * p.entry / acct, 1)}x (rủi ro $${fmt(riskUsd, 0)} = ${riskPct}% vốn), mỗi phần ${fmtQty(qty / 3)} ${coin}`
-          : "Nhập vốn ở mục Cài đặt để app tính khối lượng.",
-      ...(p.timeStopBars ? [`Giới hạn thời gian: chưa chạm TP1 sau ${Math.round(p.timeStopBars * 5 / 60 * 10) / 10} giờ → thoát lệnh`] : []),
-      ...(p.momentum4h ? ["Vào theo đà khi giá đang ở dải BB: dễ bị giật ngược — chỉ ½ khối lượng, không gồng lỗ, chạm SL là thoát."] : [])
+      `Vùng vào tham khảo (3 mức): ${p.entries.map((e) => fp(e)).join(" / ")} (TB ${fp(p.entry)})`,
+      `Mức dừng lỗ tham khảo (SL): ${fp(p.sl)} (rủi ro ${fp(p.risk)}/${coin})`,
+      `Mục tiêu tham khảo 1 (TP1): ${fp(p.tp1)} (R:R 1:${fmt(p.rr1, 1)}) → theo kế hoạch: ${p.partialTP1 ? "chốt ½, " : ""}SL dời về giá vào`,
+      p.tp2Merged ? `Mục tiêu tham khảo 2 (TP2): = TP1 (${p.tp2Merged} chặn ngay sau TP1 → kế hoạch kết thúc ở TP1)` : `Mục tiêu tham khảo 2 (TP2): ${fp(p.tp2)} (R:R 1:${fmt(p.rr2, 1)})`,
+      qty ? `Khối lượng gợi ý theo vốn và % rủi ro bạn nhập: ${fmtQty(qty)} ${coin} ≈ $${fmt(qty * p.entry, 0)} · đòn bẩy ≈ ${fmt(qty * p.entry / acct, 1)}x (rủi ro $${fmt(riskUsd, 0)} = ${riskPct}% vốn), mỗi phần ${fmtQty(qty / 3)} ${coin}. Giá trị do bạn nhập; app không biết hoàn cảnh tài chính của bạn.`
+          : "Nhập vốn và % rủi ro ở mục Cài đặt để xem khối lượng gợi ý.",
+      ...(p.timeStopBars ? [`Giới hạn thời gian của kế hoạch: nếu chưa chạm TP1 sau ${Math.round(p.timeStopBars * 5 / 60 * 10) / 10} giờ thì kế hoạch hết hiệu lực`] : []),
+      ...(p.momentum4h ? ["Kế hoạch theo đà khi giá đang ở dải BB: dễ bị giật ngược — dùng ½ khối lượng; chạm mức dừng lỗ thì kế hoạch kết thúc."] : [])
     ]
   };
 }
@@ -326,9 +387,9 @@ function savedPlan(sym) {
   if (s.status.code === "tp1" && Date.now() < planClose(s.x) + hold) return s;
   return null;
 }
-// Kết quả của kế hoạch gần nhất (trong 3 giờ) để hiện khi đang CHỜ.
+// Diễn biến giá của kế hoạch gần nhất (trong 60 phút) để hiện khi đang CHỜ.
 function lastOutcome(sym) {
-  const s = rawPlan(sym); if (!s || !s.x || Date.now() - planClose(s.x) > 3 * 3600000) return null;
+  const s = rawPlan(sym); if (!s || !s.x || Date.now() - planClose(s.x) > 60 * 60000) return null;
   if (savedPlan(sym)) return null; // còn hiệu lực → đang hiện ở ô hành động
   return { s, st: planStatus(sym, s) };
 }
@@ -365,12 +426,12 @@ function bandHits(map) {
 function buildOrder(price, map, align, bands) {
   if (!align.aligned || !bands.ready) {
     return [
-      "KHÔNG CẢNH BÁO — chưa đồng pha / chưa chạm BB đủ điều kiện.",
+      "CHƯA ĐỦ ĐIỀU KIỆN — chưa đồng pha / chưa chạm BB đủ điều kiện.",
       `1D ${align.d1.toUpperCase()} · 4H ${align.h4.toUpperCase()} · 1H ${align.h1.toUpperCase()} · 15M ${align.m15.toUpperCase()}`,
       `MACD hist: 1D ${align.macdD1} · 4H ${align.macdH4} · 1H ${align.macdH1}${align.macdAligned ? " (cùng pha)" : " (lệch pha)"} — tham khảo`,
       `Giá hiện tại: ${fp(price)}`,
-      "Ưu tiên: WAIT. Không chase, không đoán.",
-      "App sẽ tự viết lệnh khi 1D+4H+1H cùng hướng và ≥2 khung chạm band (có khung ≥1H)."
+      "Trạng thái: chờ (chưa đủ điều kiện).",
+      "App sẽ hiện kế hoạch tham khảo khi 1D+4H+1H cùng hướng và ≥2 khung chạm band (có khung ≥1H)."
     ].join("\n");
   }
   const bb4 = map["4h"].bb;
@@ -379,7 +440,7 @@ function buildOrder(price, map, align, bands) {
   const hitUpper = bands.hits.filter((h) => h.band === "upper").length >= 1;
   const hitLower = bands.hits.filter((h) => h.band === "lower").length >= 1;
   const o35 = price * 0.003, o25 = price * 0.0023, o20 = price * 0.0018; // đệm theo % giá (trước đây là $ cố định cho SOL)
-  const lines = ["**CẢNH BÁO ĐỒNG PHA + BB**", `Thời điểm: ${nowVN()} (+07)`, `Giá: ${fp(price)}`, `Hits: ${bands.hits.map((h) => h.label + " " + h.band).join(", ")}`, ""];
+  const lines = ["ĐIỀU KIỆN ĐỒNG PHA + BB", `Thời điểm: ${nowVN()} (+07)`, `Giá: ${fp(price)}`, `Hits: ${bands.hits.map((h) => h.label + " " + h.band).join(", ")}`, ""];
   if (align.dir === "tang" && hitLower) {
     const entryA = bb4 ? bb4.mid : price * 0.985;
     const sl = bb4 ? bb4.lower - o20 : price * 0.96;
@@ -388,10 +449,10 @@ function buildOrder(price, map, align, bands) {
     const risk = Math.abs(price - sl) || 1;
     const rr = Math.abs(tp1 - price) / risk;
     lines.push(
-      "Hướng: LONG (thuận 1D/4H, phản ứng BB dưới)",
-      `Entry zone: ${fp(Math.min(price, entryA))} – ${fp(Math.max(price, entryA))}`,
-      `Stop Loss: ${fp(sl)}`, `TP1: ${fp(tp1)}`, `TP2: ${fp(tp2)}`,
-      `R:R tới TP1 ≈ 1:${fmt(rr, 1)}`, `Invalidation: nến 4H đóng dưới ${fp(sl)}`,
+      "Điều kiện thiên tăng (LONG tham khảo): thuận 1D/4H, phản ứng BB dưới",
+      `Vùng vào tham khảo: ${fp(Math.min(price, entryA))} – ${fp(Math.max(price, entryA))}`,
+      `Mức dừng lỗ tham khảo (SL): ${fp(sl)}`, `Mục tiêu tham khảo 1 (TP1): ${fp(tp1)}`, `Mục tiêu tham khảo 2 (TP2): ${fp(tp2)}`,
+      `R:R tới TP1 ≈ 1:${fmt(rr, 1)}`, `Kế hoạch mất hiệu lực nếu nến 4H đóng dưới ${fp(sl)}`,
       "Nhắc: setup tham khảo, không phải lệnh đặt sẵn trên sàn."
     );
   } else if (align.dir === "giam" && hitUpper) {
@@ -401,22 +462,22 @@ function buildOrder(price, map, align, bands) {
     const risk = Math.abs(sl - price) || 1;
     const rr = Math.abs(price - tp1) / risk;
     lines.push(
-      "Hướng: SHORT (HTF bear + chạm BB trên)",
-      `Entry zone: ${fp(price)} – ${fp(price + o35)}`,
-      `Stop Loss: ${fp(sl)}`, `TP1: ${fp(tp1)}`, `TP2: ${fp(tp2)}`,
-      `R:R tới TP1 ≈ 1:${fmt(rr, 1)}`, `Invalidation: nến 1H đóng trên ${fp(sl)}`,
+      "Điều kiện thiên giảm (SHORT tham khảo): khung lớn giảm + chạm BB trên",
+      `Vùng vào tham khảo: ${fp(price)} – ${fp(price + o35)}`,
+      `Mức dừng lỗ tham khảo (SL): ${fp(sl)}`, `Mục tiêu tham khảo 1 (TP1): ${fp(tp1)}`, `Mục tiêu tham khảo 2 (TP2): ${fp(tp2)}`,
+      `R:R tới TP1 ≈ 1:${fmt(rr, 1)}`, `Kế hoạch mất hiệu lực nếu nến 1H đóng trên ${fp(sl)}`,
       "Nhắc: setup tham khảo, không phải lệnh đặt sẵn trên sàn."
     );
   } else if (align.dir === "tang" && hitUpper) {
     lines.push(
-      "Hướng: KHÔNG LONG chase.",
-      "Đồng pha tăng nhưng đang chạm BB trên — stretch.",
-      `Chờ pullback về 4H mid ${bb4 ? fp(bb4.mid) : "—"} mới xét long.`,
-      `SL tham chiếu nếu vẫn muốn plan: ${bb4 ? fp(bb4.lower - o20) : "—"}`,
-      "Ưu tiên: WAIT."
+      "Chưa đủ điều kiện LONG: giá đang sát BB trên (kéo giãn).",
+      "Đồng pha tăng nhưng đang chạm BB trên.",
+      `Mức tham chiếu: 4H mid ${bb4 ? fp(bb4.mid) : "—"} (điều kiện LONG chỉ được xét lại khi giá về vùng này).`,
+      `Mức dừng lỗ tham chiếu: ${bb4 ? fp(bb4.lower - o20) : "—"}`,
+      "Trạng thái: chờ (chưa đủ điều kiện)."
     );
   } else {
-    lines.push("Hướng: WAIT cho nến xác nhận 1H.", "Không short đáy band khi tín hiệu lệch.");
+    lines.push("Trạng thái: chờ nến xác nhận 1H.", "Điều kiện SHORT chưa thoả khi tín hiệu lệch (giá đang ở đáy band).");
   }
   return lines.join("\n");
 }
@@ -441,13 +502,13 @@ function setStatus(align, bands) {
   $("alignDetail").textContent = `EMA: 1D ${align.d1} · 4H ${align.h4} · 1H ${align.h1} · 15M ${align.m15}${align.m15Opp ? " (15M ngược)" : ""} | MACD: 1D ${mTxt(align.macdD1)} 4H ${mTxt(align.macdH4)} 1H ${mTxt(align.macdH1)}${align.sameHTF && !align.macdAligned ? " (lệch pha, tham khảo)" : ""}`;
   const fire = align.aligned && bands.ready;
   al.className = "card status " + (fire ? "bad" : "warn");
-  $("alertText").textContent = fire ? "CẢNH BÁO" : "KHÔNG CẢNH BÁO";
+  $("alertText").textContent = fire ? "ĐỦ ĐIỀU KIỆN BB" : "CHƯA ĐỦ ĐIỀU KIỆN";
   $("alertDetail").textContent = bands.hits.length ? bands.hits.map((h) => h.label + " " + h.band).join(" · ") : "Chưa chạm cận trên/dưới";
   // Khớp với buildOrder: long chỉ khi chạm BB dưới, short chỉ khi chạm BB trên; ngược lại là chase.
   const hitU = bands.hits.some((h) => h.band === "upper"), hitL = bands.hits.some((h) => h.band === "lower");
-  $("biasText").textContent = !fire ? "WAIT"
-    : align.dir === "tang" ? (hitL ? "XEM LONG" : "KHÔNG CHASE · chờ pullback")
-    : (hitU ? "XEM SHORT" : "KHÔNG SHORT ĐÁY · chờ hồi");
+  $("biasText").textContent = !fire ? "Chưa đủ điều kiện"
+    : align.dir === "tang" ? (hitL ? "Thiên tăng (điều kiện LONG đang thoả)" : "Thiên tăng nhưng giá sát BB trên (chưa đủ điều kiện LONG)")
+    : (hitU ? "Thiên giảm (điều kiện SHORT đang thoả)" : "Thiên giảm nhưng giá sát BB dưới (chưa đủ điều kiện SHORT)");
   return fire;
 }
 function addLog(text, alert) {
@@ -468,7 +529,7 @@ function nextHourLabel() {
 async function notify(title, body, tag = "solpha-alert") {
   if (!("Notification" in window)) return "Thiết bị không hỗ trợ thông báo";
   if (Notification.permission !== "granted") return "Quyền thông báo: " + Notification.permission;
-  const opts = { body, icon: (window.SOLPHA_BRAND && window.SOLPHA_BRAND.icon192) || "icons/icon-192.png", badge: (window.SOLPHA_BRAND && window.SOLPHA_BRAND.icon192) || "icons/icon-192.png", tag, renotify: true, vibrate: [300, 150, 300, 150, 300], requireInteraction: true, data: { brand: (window.SOLPHA_BRAND && window.SOLPHA_BRAND.id) || "etek" } };
+  const opts = { body, icon: (window.SOLPHA_BRAND && window.SOLPHA_BRAND.icon192) || "icons/icon-192.png", badge: (window.SOLPHA_BRAND && window.SOLPHA_BRAND.icon192) || "icons/icon-192.png", tag, renotify: true, vibrate: [300, 150, 300, 150, 300], requireInteraction: true, data: { brand: (window.SOLPHA_BRAND && window.SOLPHA_BRAND.id) || "web" } };
   if ($("chkSound").checked) beep();
   // Chrome Android không cho dùng new Notification() — bắt buộc đi qua service worker.
   try {
@@ -489,10 +550,17 @@ function beep() {
     g.gain.setValueAtTime(0.05, ctx.currentTime); o.start(); o.stop(ctx.currentTime + 0.18);
   } catch (_) {}
 }
+// Nội dung thông báo đẩy: trung tính, KHÔNG kèm mức giá vào/SL/TP (chi tiết nằm trong app).
+const NOTICE = {
+  signal: (coin, x) => `${coin}: có nến đủ điều kiện quy tắc (${x.side === "long" ? "Long" : "Short"} ${x.engine === "m4h" ? "Momentum 4H/1H" : x.setup}) — mở app để xem kế hoạch tham khảo`,
+  bands: (coin, dir) => `${coin}: 1D/4H/1H đồng pha ${dir === "tang" ? "tăng" : "giảm"} và có khung chạm dải Bollinger — mở app để xem chi tiết`,
+  missed: (coin, n) => `${coin}: ${n} điều kiện kỹ thuật xuất hiện khi app ở nền — mở app để xem`
+};
+window.SolphaNotice = NOTICE;
 // Quét một cặp: tính toàn bộ, lưu vào state[sym], gửi cảnh báo (mọi cặp, không chỉ cặp đang xem).
 async function scanPair(sym, reason, gapMin) {
   const st = stOf(sym), coin = baseOf(sym), opt = sigOptions(sym);
-  try { st.ticker = await loadTicker(sym); st.tickerAt = Date.now(); st.funding = st.ticker.funding; } catch (e) { st.tickerError = String(e.message || e); }
+  try { st.ticker = await loadTicker(sym); st.tickerAt = Date.now(); st.funding = st.ticker.funding; } catch (e) { st.tickerError = String(e.message || e); if (e.netFail) throw e; } // lỗi mạng hoàn toàn: khỏi tải nến (cũng sẽ lỗi)
   const entries = await Promise.all(TFS.map(async (tf) => [tf.key, analyze(await loadKlines(sym, tf.binance))]));
   const map = Object.fromEntries(entries);
   const price = map["5m"].last;
@@ -503,7 +571,7 @@ async function scanPair(sym, reason, gapMin) {
   Object.assign(st, { map, align, bands, trig, price, fire, error: null, updated: nowVN(), scanAt: Date.now() });
   st.order = buildOrder(price, map, align, bands);
   persistPlan(sym, trig);
-  const summary = fire ? `CẢNH BÁO ${align.dir} @ ${fp(price)} · ${bands.hits.map((h) => h.label).join(",")}` : `WAIT ${fp(price)} · 1D ${align.d1} / 4H ${align.h4} / 1H ${align.h1}`;
+  const summary = fire ? `ĐỒNG PHA ${align.dir} + BB @ ${fp(price)} · ${bands.hits.map((h) => h.label).join(",")}` : `Chờ ${fp(price)} · 1D ${align.d1} / 4H ${align.h4} / 1H ${align.h1}`;
   // Ghi nhật ký pha mỗi 15 phút: lần quét đầu tiên của mỗi mốc :00/:15/:30/:45 (dù do WebSocket, đồng hồ 5′ hay 15′ kích hoạt).
   const q = Math.floor(Date.now() / Q15);
   if (reason === "boot" || q !== st.loggedQ) { st.loggedQ = q; addLog(`[${coin}] ${summary}`, fire); }
@@ -512,7 +580,8 @@ async function scanPair(sym, reason, gapMin) {
     const lk = pkey("solpha_last_alert", sym);
     if (key !== store.get(lk, "")) {
       store.set(lk, key);
-      await notify(`SOLPHA · ${coin} cảnh báo`, `[${coin}] ${summary}`, `solpha-${coin}`);
+      // Thông báo đẩy trung tính: không kèm mức giá; chi tiết nằm trong app.
+      await notify(`SOLPHA · ${coin}`, NOTICE.bands(coin, align.dir), `solpha-${coin}`);
     }
   }
   for (const x of trig.filter((t) => t.side)) {
@@ -520,9 +589,9 @@ async function scanPair(sym, reason, gapMin) {
     if (seenKeys.has(key)) continue;
     markSeen(key);
     const p = x.plan;
-    const msg = `[${coin}] ${x.side.toUpperCase()}${x.engine === "m4h" ? " MOMENTUM 4H/1H (½ size" + (x.d1Against ? ", ngược 1D" : "") + ")" : ""}${x.corrective ? " ĐIỀU CHỈNH (½ size)" : ""} Setup ${x.setup} ${x.label}${x.momentum ? " (Momentum ½ size)" : ""} · vào ${fp(p.entries[0])}/${fp(p.entries[1])}/${fp(p.entries[2])} · SL ${fp(p.sl)} · TP1 ${fp(p.tp1)} (1:${fmt(p.rr1, 1)}) · TP2 ${fp(p.tp2)} (1:${fmt(p.rr2, 1)})`;
-    addLog(msg, true);
-    await notify(`SOLPHA · ${coin} nến tín hiệu`, msg, `solpha-${coin}`);
+    const msg = `[${coin}] ${x.side.toUpperCase()}${x.engine === "m4h" ? " MOMENTUM 4H/1H (½ khối lượng" + (x.d1Against ? ", ngược 1D" : "") + ")" : ""}${x.corrective ? " ĐIỀU CHỈNH (½ khối lượng)" : ""} Setup ${x.setup} ${x.label}${x.momentum ? " (Momentum ½ khối lượng)" : ""} · mức tham khảo: vùng vào ${fp(p.entries[0])}/${fp(p.entries[1])}/${fp(p.entries[2])} · SL ${fp(p.sl)} · TP1 ${fp(p.tp1)} (1:${fmt(p.rr1, 1)}) · TP2 ${fp(p.tp2)} (1:${fmt(p.rr2, 1)})`;
+    addLog(msg, true); // nhật ký trong app giữ đầy đủ chi tiết
+    await notify(`SOLPHA · ${coin}`, NOTICE.signal(coin, x), `solpha-${coin}`);
   }
   await catchUp(sym, map, gapMin);
 }
@@ -530,7 +599,7 @@ async function scanPair(sym, reason, gapMin) {
 // Không gửi cảnh báo — cảnh báo vẫn theo vòng quét 5 phút trên nến đã đóng.
 async function liveRefresh() {
   const sym = active, st = stOf(sym);
-  if (scanning || st.live || !st.map || wsOk() || document.visibilityState !== "visible") return;
+  if (scanning || st.live || !st.map || wsOk() || net.fails || document.visibilityState !== "visible") return;
   st.live = true;
   try {
     const entries = await Promise.all(TFS.map(async (tf) => [tf.key, analyze(await loadKlines(sym, tf.binance))]));
@@ -572,8 +641,8 @@ function renderRV(st) {
 // ---- Ô HÀNH ĐỘNG: có tín hiệu → LONG/SHORT + giá vào, SL, TP, khối lượng; chưa có → CHỜ + đang thiếu gì ----
 function renderAction(sym) {
   const st = stOf(sym), box = $("actBox"); if (!box) return;
-  if (!st.map) { box.className = "act wait"; const geo = /\b(451|403)\b/.test(st.error || "");
-    box.innerHTML = st.error ? `<div class="act-h"><span class="act-side">${geo ? "Binance không phục vụ mạng này" : "Mất kết nối dữ liệu"}</span><span class="act-sub">${geo ? "Binance chặn một số khu vực/IP (ví dụ Mỹ). Thử đổi mạng (4G/Wi-Fi khác) hoặc VPN, app sẽ tự thử lại" : "mạng chậm hoặc app vừa chạy nền · đang tự thử lại"}${retryCount ? " (lần " + retryCount + ")" : ""}…</span></div>` : `<div class="act-h"><span class="act-side">Đang quét…</span></div>`; return; }
+  if (!st.map) { box.className = "act wait err";
+    box.innerHTML = st.error ? netBoxHtml(st.error) : `<div class="act-h"><span class="act-side">Đang quét…</span></div>`; return; }
   const live = st.trig && (st.trig.find((x) => x.side && x.key === "5m") || st.trig.find((x) => x.side && x.key === "15m") || st.trig.find((x) => x.side));
   const saved = live ? null : savedPlan(sym), x = live || (saved && saved.x), hm = hmVN;
   if (x) {
@@ -583,32 +652,33 @@ function renderAction(sym) {
     // Khoảng cách SL/TP quy ra bội số ATR của khung nến tín hiệu (5M hoặc 15M) để cân đối.
     const atrK = x.key === "15m" ? "15m" : "5m", atrSig = atrOf(st, atrK), dA = (d) => (atrSig ? ` · ${fmt(Math.abs(d) / atrSig, 1)}×ATR ${atrK.toUpperCase()}` : "");
     const sub = x.engine === "m4h" ? "Momentum 4H/1H" : `Setup ${x.setup}${x.corrective ? " · điều chỉnh" : ""} · nến ${x.label}`;
-    // MỚI = nến tín hiệu vừa đóng; ĐANG GIỮ = kế hoạch từ tín hiệu trước đó, còn hiệu lực.
+    // MỚI = nến tín hiệu vừa đóng; KẾ HOẠCH CÒN HIỆU LỰC = kế hoạch từ tín hiệu trước đó, còn trong thời gian hiệu lực.
     const ago = Math.round((Date.now() - planClose(x)) / 60000);
-    // R:R nếu vào ở giá hiện tại: < 1 nghĩa là giá đã chạy quá xa về phía TP1 → không vào mới (người đã vào thì giữ theo kế hoạch).
+    // R:R nếu lấy giá hiện tại làm điểm vào: < 1 nghĩa là giá đã đi quá xa về phía TP1.
     const px = (st.ticker && st.ticker.last) || st.price, short = x.side === "short";
     const rrNow = px ? (short ? (px - p.tp1) / (p.sl - px) : (p.tp1 - px) / (px - p.sl)) : null;
     const late = saved && saved.status.code === "open" && rrNow != null && rrNow < 1;
     const tag = !saved ? `<div class="act-tag new">MỚI · nến ${x.label} ${hm(x.t)} vừa đóng</div>`
-      : saved.status.code === "tp1" ? `<div class="act-tag tp">ĐÃ CHẠM TP1 lúc ${hm(saved.status.t)} ✓ · dời SL về giá vào, giữ phần còn lại tới TP2</div>`
-      : `<div class="act-tag hold">ĐANG GIỮ · tín hiệu nến ${x.label} ${hm(x.t)} (đóng ${ago}′ trước) · còn hiệu lực ${Math.max(0, Math.ceil((saved.exp - Date.now()) / 60000))}′</div>`
-        + (late ? `<div class="act-tag late">GIÁ ĐÃ CHẠY XA · vào lúc này R:R chỉ 1:${fmt(Math.max(rrNow, 0), 1)} → không vào mới, đã vào thì giữ theo kế hoạch</div>` : "");
+      : saved.status.code === "tp1" ? `<div class="act-tag tp">GIÁ ĐÃ CHẠM MỤC TIÊU 1 lúc ${hm(saved.status.t)} (theo quy tắc: SL dời về giá vào, phần còn lại hướng tới mục tiêu 2)</div>`
+      : `<div class="act-tag hold">KẾ HOẠCH CÒN HIỆU LỰC · nến ${x.label} ${hm(x.t)} (đóng ${ago}′ trước) · còn ${Math.max(0, Math.ceil((saved.exp - Date.now()) / 60000))}′</div>`
+        + (late ? `<div class="act-tag late">GIÁ ĐÃ ĐI XA · R:R hiện tại chỉ 1:${fmt(Math.max(rrNow, 0), 1)} (dưới ngưỡng 1)</div>` : "");
     box.className = "act " + x.side + (saved ? " hold" : "") + (late ? " late" : "");
     box.innerHTML = `${tag}<div class="act-h"><span class="act-side">${x.side === "long" ? "▲ LONG" : "▼ SHORT"}</span><span class="act-sub">${sub}${half ? " · ½ khối lượng" : ""}</span></div>
       <div class="act-grid">
-        <div><span>Vào 3 phần</span><b>${fp(p.entries[0])}</b><small>${fp(p.entries[1])} / ${fp(p.entries[2])}</small></div>
-        ${saved && saved.status.code === "tp1" ? `<div><span>Stop loss (đã dời)</span><b>${fp(p.entry)}</b><small>hoà vốn · SL gốc ${fp(p.sl)}</small></div>` : `<div><span>Stop loss</span><b class="down">${fp(p.sl)}</b><small>−${fp(Math.abs(p.entry - p.sl))}${dA(p.entry - p.sl)}</small></div>`}
-        <div><span>TP1 · 1:${fmt(p.rr1, 1)}</span><b class="up">${fp(p.tp1)}</b><small>+${fp(Math.abs(p.tp1 - p.entry))}${dA(p.tp1 - p.entry)} · ${p.tp2Merged ? "chốt hết" : "chốt ½"}</small></div>
-        ${p.tp2Merged ? `<div><span>TP2</span><b class="muted">= TP1</b><small>${p.tp2Merged} chặn ngay sau TP1 → chốt hết ở TP1${p.timeStopBars ? " · thoát sau " + Math.round(p.timeStopBars * 5 / 6) / 10 + "h nếu chưa TP1" : ""}</small></div>` : `<div><span>TP2 · 1:${fmt(p.rr2, 1)}</span><b class="up">${fp(p.tp2)}</b><small>+${fp(Math.abs(p.tp2 - p.entry))}${dA(p.tp2 - p.entry)}${p.timeStopBars ? " · thoát sau " + Math.round(p.timeStopBars * 5 / 6) / 10 + "h nếu chưa TP1" : ""}</small></div>`}
+        <div><span>Vùng vào tham khảo (3 mức)</span><b>${fp(p.entries[0])}</b><small>${fp(p.entries[1])} / ${fp(p.entries[2])}</small></div>
+        ${saved && saved.status.code === "tp1" ? `<div><span>Mức dừng lỗ đã dời (tham khảo)</span><b>${fp(p.entry)}</b><small>hoà vốn · SL gốc ${fp(p.sl)}</small></div>` : `<div><span>Mức dừng lỗ tham khảo (SL)</span><b class="down">${fp(p.sl)}</b><small>−${fp(Math.abs(p.entry - p.sl))}${dA(p.entry - p.sl)}</small></div>`}
+        <div><span>Mục tiêu tham khảo 1 · 1:${fmt(p.rr1, 1)}</span><b class="up">${fp(p.tp1)}</b><small>+${fp(Math.abs(p.tp1 - p.entry))}${dA(p.tp1 - p.entry)} · ${p.tp2Merged ? "kế hoạch kết thúc ở đây" : "kế hoạch chốt ½"}</small></div>
+        ${p.tp2Merged ? `<div><span>Mục tiêu tham khảo 2</span><b class="muted">= TP1</b><small>${p.tp2Merged} chặn ngay sau TP1 → kế hoạch kết thúc ở TP1${p.timeStopBars ? " · hết hiệu lực sau " + Math.round(p.timeStopBars * 5 / 6) / 10 + "h nếu chưa chạm TP1" : ""}</small></div>` : `<div><span>Mục tiêu tham khảo 2 · 1:${fmt(p.rr2, 1)}</span><b class="up">${fp(p.tp2)}</b><small>+${fp(Math.abs(p.tp2 - p.entry))}${dA(p.tp2 - p.entry)}${p.timeStopBars ? " · hết hiệu lực sau " + Math.round(p.timeStopBars * 5 / 6) / 10 + "h nếu chưa chạm TP1" : ""}</small></div>`}
       </div>
-      <div class="act-foot">${rrNow != null && (!saved || saved.status.code === "open") ? `Vào ngay ${fp(px)}: R:R <b>1:${fmt(Math.max(rrNow, 0), 1)}</b> · ` : ""}${qty ? `Khối lượng <b>${fmtQty(qty)} ${coin}</b> ≈ $${fmt(qty * p.entry, 0)} · rủi ro $${fmt(riskUsd, 0)}` : "Nhập vốn ở Cài đặt để tính khối lượng"}</div>`;
+      <div class="act-foot">${rrNow != null && (!saved || saved.status.code === "open") ? `Nếu dùng giá hiện tại ${fp(px)} làm điểm vào, R:R là <b>1:${fmt(Math.max(rrNow, 0), 1)}</b> · ` : ""}${qty ? `Khối lượng gợi ý theo vốn và % rủi ro bạn nhập: <b>${fmtQty(qty)} ${coin}</b> ≈ $${fmt(qty * p.entry, 0)} · rủi ro $${fmt(riskUsd, 0)}` : "Nhập vốn và % rủi ro ở Cài đặt để xem khối lượng gợi ý"}</div>
+      <div class="act-foot2">Giá trị do bạn nhập; app không biết hoàn cảnh tài chính của bạn.</div>`;
     return;
   }
   const a = st.align, up = a.d1 === "tang" && a.h4 === "tang" && a.h1 === "tang", dn = a.d1 === "giam" && a.h4 === "giam" && a.h1 === "giam";
-  const lean = up ? "Thiên LONG · chờ nến 5M đủ chuẩn" : dn ? "Thiên SHORT · chờ nến 5M đủ chuẩn" : a.h4 === "giam" && a.h1 === "giam" ? "4H/1H giảm · chờ 5M+15M chạm BB dưới (Momentum)" : "Khung lớn chưa đồng pha · đứng ngoài";
+  const lean = up ? "Thiên tăng · chờ nến 5M đạt điều kiện" : dn ? "Thiên giảm · chờ nến 5M đạt điều kiện" : a.h4 === "giam" && a.h1 === "giam" ? "4H/1H giảm · chờ 5M+15M chạm BB dưới (Momentum)" : "Khung lớn chưa đồng pha · chưa đủ điều kiện";
   const miss = (st.trig || []).filter((t) => t.why && t.why[0]).slice(0, 3).map((t) => `<div><b>${t.label}</b> ${t.why[0]}</div>`).join("");
   box.className = "act " + (st.fire ? "warn" : "wait");
-  const out = lastOutcome(sym), OUT = { sl: "chạm SL ✗", tp2: "chạm TP2 ✓✓", tpall: "chạm TP1, chốt hết ✓", be: "chạm TP1 rồi về hoà vốn ✓", open: "hết hiệu lực", tp1: "chạm TP1 ✓, hết giờ giữ phần còn lại" };
+  const out = lastOutcome(sym), OUT = { sl: "giá đã chạm mức dừng lỗ", tp2: "giá đã chạm mục tiêu 2", tpall: "giá đã chạm mục tiêu 1 (kế hoạch kết thúc ở mục tiêu 1)", be: "giá chạm mục tiêu 1 rồi quay về giá vào", open: "hết hiệu lực", tp1: "giá đã chạm mục tiêu 1, hết thời gian theo dõi" };
   const outTxt = out ? `<div class="act-out">Kế hoạch gần nhất: ${out.s.x.side.toUpperCase()} ${out.s.x.engine === "m4h" ? "M4H" : out.s.x.setup} nến ${hmVN(out.s.x.t)} → <b>${OUT[out.st.code]}</b>${out.st.t ? " lúc " + hmVN(out.st.t) : ""}</div>` : "";
   box.innerHTML = `<div class="act-h"><span class="act-side">${st.fire ? "CHÚ Ý" : "CHỜ"}</span><span class="act-sub">${lean}</span></div>${miss ? `<div class="act-miss">${miss}</div>` : ""}${outTxt}`;
 }
@@ -635,9 +705,9 @@ function renderPair(sym) {
   $("toolsPair").textContent = $("setPair").textContent = coin;
   if (!st.map) {
     renderAction(sym); $("trendStrip").innerHTML = ""; $("rvBox").innerHTML = "";
-    $("trigText").textContent = st.error ? "Mất kết nối dữ liệu · đang tự thử lại" : "Đang quét…";
-    $("trigWhy").textContent = st.error || "";
-    $("orderBox").textContent = st.error ? "Lỗi tải dữ liệu: " + st.error : "Đang tính setup…";
+    $("trigText").textContent = st.error ? netMsg(st.error)[0] + " · đang tự thử lại" : "Đang quét…";
+    $("trigWhy").textContent = st.error ? netMsg(st.error)[1] : "";
+    $("orderBox").textContent = st.error ? netMsg(st.error)[0] + " — chi tiết kỹ thuật xem ở khung trên tab Tín hiệu." : "Đang tính setup…";
     return;
   }
   curDec = decOf(sym);
@@ -648,8 +718,8 @@ function renderPair(sym) {
   renderRV(st);
   renderAction(sym);
   renderTrend(st);
-  if (!renderPlan(sym) && !st.fire) $("biasText").textContent = "WAIT";
-  $("orderBox").textContent = (st.error ? "⚠ Lần quét gần nhất lỗi: " + st.error + "\n(đang hiện dữ liệu lần trước)\n\n" : "") + st.order;
+  if (!renderPlan(sym) && !st.fire) $("biasText").textContent = "Chưa đủ điều kiện";
+  $("orderBox").textContent = (st.error ? "⚠ " + netMsg(st.error)[0] + " — đang hiện dữ liệu lần trước.\n\n" : "") + st.order;
   renderUpdated(st);
   $("missedBox").innerHTML = st.missedHtml || "";
   const bd = badgeFor(sym);
@@ -690,8 +760,9 @@ function renderTabs() {
 }
 async function refreshTickers(force) {
   if (!force && wsOk()) return; // đang có realtime
+  if (net.fails && !force) return; // đang ngắt mạch: chỉ vòng quét (fullScan) được thử lại
   // Mỗi cặp tự cập nhật độc lập và hiện ngay khi giá về: một cặp chậm/treo không làm đứng các cặp khác.
-  await Promise.all(pairs.map(async (b) => {
+  const one = async (b) => {
     const sym = symOf(b), st = stOf(sym);
     if (st.refreshing) return;
     st.refreshing = true;
@@ -699,7 +770,10 @@ async function refreshTickers(force) {
     st.refreshing = false;
     renderTabs();
     if (sym === active && st.ticker) renderTicker(st.ticker);
-  }));
+  };
+  const list = pairs.slice();
+  if (!net.okAt && list.length > 1) { await one(list.shift()); if (net.fails) return; } // chưa biết mạng có ổn không: hỏi một cặp trước, lỗi thì dừng
+  await Promise.all(list.map(one));
 }
 // ---- Realtime: WebSocket Binance Futures (giá, mark, funding, nến 5 khung đẩy về liên tục ~0.25 giây) ----
 // Hỏng WebSocket thì tự quay về hỏi giá định kỳ (REST) như cũ và tự kết nối lại.
@@ -727,7 +801,9 @@ function wsConnect() {
 }
 function wsRetryLater() {
   clearTimeout(wsReconnect);
-  wsReconnect = setTimeout(() => { if (document.visibilityState === "visible") wsConnect(); }, Math.min(30000, 1000 * 2 ** wsRetry++));
+  let d = Math.min(30000, 1000 * 2 ** Math.min(wsRetry++, 10));
+  if (net.fails) d = Math.max(d, net.until - Date.now() + 1000); // đang ngắt mạch: kết nối lại WebSocket cùng nhịp với vòng thử lại REST
+  wsReconnect = setTimeout(() => { if (document.visibilityState === "visible") wsConnect(); }, d);
 }
 function onStream(d) {
   if (!d || !d.s) return;
@@ -770,25 +846,55 @@ setInterval(() => {
   if (st.map) renderRV(st);
   $("livePill").textContent = scanning ? "SCAN" : wsOk() ? "⚡ REALTIME" : "LIVE";
 }, 1000);
+// Đếm ngược "Tự thử lại sau …s" của khung lỗi mạng (chạy cả khi tab ẩn không cần thiết) + nút "Thử lại ngay".
+setInterval(() => { const el = $("retryIn"); if (el) el.textContent = Math.max(0, Math.ceil((net.until - Date.now()) / 1000)); }, 1000);
+$("actBox").addEventListener("click", (e) => {
+  if (!e.target.closest("#btnRetryNow")) return;
+  net.until = net.lease = 0; retryCount = 0; // người dùng chủ động: bỏ chờ, thử ngay một vòng
+  clearTimeout(retryTimer); retryTimer = null;
+  if (!wsOk()) wsConnect();
+  fullScan("manual");
+});
+function scheduleRetry(ms) {
+  clearTimeout(retryTimer); // luôn chỉ có MỘT hẹn thử lại: không chồng vòng
+  retryTimer = setTimeout(() => { retryTimer = null; fullScan("retry"); }, Math.max(1000, ms));
+}
 async function fullScan(reason = "manual", onlyActive = false) {
   if (scanning) return;
+  const forced = reason === "manual";
+  // Đang ngắt mạch (mọi cặp vừa lỗi hoàn toàn): không quét lại trước hạn, trừ khi người dùng bấm tay hoặc vừa mở lại app sau >15 giây.
+  if (net.fails && !forced && Date.now() < net.until && !(reason === "resume" && Date.now() - net.lastTry > 15000)) {
+    if (!retryTimer) scheduleRetry(net.until - Date.now() + 500);
+    return;
+  }
   scanning = true;
+  net.lastTry = Date.now();
+  if (forced) net.force++;
   const gapMin = lastScanAt ? (Date.now() - lastScanAt) / 60000 : 0; // app "ngủ" bao lâu trước lần quét này
   $("livePill").textContent = "SCAN";
   const order = onlyActive ? [active] : [active, ...pairs.map(symOf).filter((s) => s !== active)]; // cặp đang xem quét trước
+  let dead = false;
   for (const sym of order) {
+    if (dead) { stOf(sym).error = net.errs || "không tới được Binance"; if (sym === active) renderPair(sym); renderTabs(); continue; } // cặp đầu đã lỗi mạng hoàn toàn → không hỏi tiếp từng cặp
     try { await scanPair(sym, reason, gapMin); }
-    catch (e) { stOf(sym).error = String(e.message || e); addLog(`[${baseOf(sym)}] Lỗi API: ${stOf(sym).error}`, false); }
+    catch (e) {
+      stOf(sym).error = e.paused ? (net.errs || "tạm dừng thử lại") : String(e.message || e);
+      if (e.netFail) dead = true;
+      else addLog(`[${baseOf(sym)}] Lỗi dữ liệu: ${String(e.message || e).slice(0, 160)}`, false);
+    }
     if (sym === active) renderPair(sym);
     renderTabs();
   }
+  if (forced) net.force--;
   nextHourLabel();
   lastScanAt = Date.now();
   scanning = false;
-  // Cặp nào lỗi thì tự thử lại sau 15″, 30″, 45″, 60″ — không chờ tới mốc 5 phút kế tiếp.
-  clearTimeout(retryTimer);
-  if (order.some((s) => stOf(s).error)) { if (retryCount < 4) { retryCount++; retryTimer = setTimeout(() => fullScan("retry"), 15000 * retryCount); } }
-  else retryCount = 0;
+  if (dead && net.fails === 1 && !net.logged) { net.logged = true; addLog("Không tải được dữ liệu từ Binance (mạng offline, bị chặn hoặc quá chậm) — app tự thử lại với thời gian chờ tăng dần.", false); }
+  if (!dead) net.logged = false;
+  const failed = order.filter((s) => stOf(s).error);
+  if (dead && net.fails) scheduleRetry(net.until - Date.now() + 500); // ngắt mạch: 15″ → 30″ → 60″ → 120″ → 300″
+  else if (failed.length) { clearTimeout(retryTimer); retryTimer = null; if (retryCount < 4) { retryCount++; scheduleRetry(15000 * retryCount); } } // lỗi lẻ: 15″, 30″, 45″, 60″
+  else { clearTimeout(retryTimer); retryTimer = null; retryCount = 0; }
 }
 // Quét bù: xem lại các nến 5M đã đóng trong 90 phút qua bằng đúng bộ máy tín hiệu, liệt kê tín hiệu (kể cả khi app "ngủ"
 // lúc nó xảy ra) và báo bù những tín hiệu chưa từng báo. Không áp dụng bộ lọc funding trừ khi funding hiện tại đã quá âm.
@@ -811,20 +917,20 @@ async function catchUp(sym, map, gapMin) {
   const hm = (t) => new Date(t).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" });
   const missed = items.filter((x) => !seenKeys.has(x.key));
   const sleep = gapMin >= 8 ? `<div class="muted">App vừa thức dậy sau ${Math.round(gapMin)} phút "ngủ" — đã quét bù các nến trong lúc đó.</div>` : "";
-  st.missedHtml = sleep + (items.length ? `<div class="muted"><b>Tín hiệu 90 phút qua · ${coin}</b></div>` + items.map((x) => {
+  st.missedHtml = sleep + (items.length ? `<div class="muted"><b>Điều kiện kỹ thuật 90 phút qua · ${coin}</b></div>` + items.map((x) => {
     const p = x.sig.plan, age = Math.round((Date.now() - (x.t + 300000)) / 60000), isMiss = !seenKeys.has(x.key);
-    return `<div class="mrow ${isMiss ? "miss" : ""}"><b>${hm(x.t)}</b> · ${x.sig.side.toUpperCase()} ${x.tag}${(p.sizeFactor || 1) < 1 ? " ½" : ""} · ${age}′ trước · vào ${fp(p.entries[0])} · SL ${fp(p.sl)} · TP1 ${fp(p.tp1)}${isMiss ? ' <span class="tag giam">BỎ LỠ</span>' : ""}</div>`;
-  }).join("") + `<div class="muted">Tín hiệu quá 30′ tuổi: giá đã đi xa, cân nhắc kỹ trước khi vào.</div>` : "");
+    return `<div class="mrow ${isMiss ? "miss" : ""}"><b>${hm(x.t)}</b> · ${x.sig.side.toUpperCase()} ${x.tag}${(p.sizeFactor || 1) < 1 ? " ½" : ""} · ${age}′ trước · mức tham khảo: vùng vào ${fp(p.entries[0])} · SL ${fp(p.sl)} · TP1 ${fp(p.tp1)}${isMiss ? ' <span class="tag giam">CHƯA XEM</span>' : ""}</div>`;
+  }).join("") + `<div class="muted">Điều kiện đã xuất hiện hơn 30′ trước; giá có thể đã thay đổi.</div>` : "");
   if (missed.length) {
     missed.forEach((x) => markSeen(x.key));
-    const msg = `[${coin}] Bỏ lỡ ${missed.length} tín hiệu: ` + missed.slice(0, 4).map((x) => `${hm(x.t)} ${x.sig.side.toUpperCase()} ${x.tag}`).join(" · ") + " — mở app xem kế hoạch lệnh";
+    const msg = `[${coin}] ${missed.length} điều kiện kỹ thuật xuất hiện khi app ở nền: ` + missed.slice(0, 4).map((x) => `${hm(x.t)} ${x.sig.side.toUpperCase()} ${x.tag}`).join(" · ") + " — mở app để xem kế hoạch tham khảo";
     addLog(msg, true);
-    if (document.visibilityState !== "visible") await notify(`SOLPHA · ${coin} — tín hiệu bỏ lỡ`, msg, `solpha-missed-${coin}`);
+    if (document.visibilityState !== "visible") await notify(`SOLPHA · ${coin}`, NOTICE.missed(coin, missed.length), `solpha-missed-${coin}`);
   }
 }
 // App thức dậy (mở lại / quay lại từ app khác): quét ngay thay vì chờ mốc 5 phút kế tiếp.
-function wake(reason) { if (Date.now() - lastScanAt > 45000 || pairs.some((b) => { const st = stOf(symOf(b)); return st.error || !st.map; })) { retryCount = 0; fullScan(reason); } }
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { wake("resume"); if (!wsOk()) wsConnect(); refreshTickers(); if (store.get("solpha_wake", "0") === "1") setWake(true); } });
+function wake(reason) { if (Date.now() - lastScanAt > 45000 || pairs.some((b) => { const st = stOf(symOf(b)); return st.error || !st.map; })) { if (!net.fails) retryCount = 0; fullScan(reason); } }
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { wake("resume"); if (!wsOk() && !(net.fails && Date.now() < net.until)) wsConnect(); refreshTickers(); if (store.get("solpha_wake", "0") === "1") setWake(true); } });
 window.addEventListener("pageshow", () => wake("resume"));
 window.addEventListener("focus", () => wake("resume"));
 async function setWake(on) {
@@ -863,7 +969,7 @@ function setNotifyBtn(text, on) { const b = $("btnNotify"); b.textContent = on ?
 $("btnNotify").addEventListener("click", async () => {
   if (!("Notification" in window)) { setNotifyBtn("Thiết bị không hỗ trợ", false); return; }
   const perm = await Notification.requestPermission();
-  if (perm === "granted") notify("SOLPHA", "Cảnh báo đã bật. Giữ app mở để quét mỗi 15 phút và realtime.");
+  if (perm === "granted") notify("SOLPHA", "Đã bật thông báo điều kiện kỹ thuật. Giữ app mở để quét.");
   setNotifyBtn(perm === "granted" ? "Cảnh báo đã bật" : "Trình duyệt chặn thông báo", perm === "granted");
 });
 $("btnRefresh").addEventListener("click", () => fullScan("manual"));
@@ -932,7 +1038,7 @@ async function addPair() {
   if (pairs.includes(raw)) { msg.textContent = raw + " đã có trong danh sách."; return; }
   if (pairs.length >= 8) { msg.textContent = "Tối đa 8 cặp để quét kịp mỗi 5 phút."; return; }
   msg.textContent = "Đang kiểm tra " + raw + "USDT trên Binance…";
-  try { await loadTicker(symOf(raw)); } catch (_) { msg.textContent = raw + "USDT không có trên Binance Futures."; return; }
+  try { await loadTicker(symOf(raw), true); } catch (_) { msg.textContent = raw + "USDT không có trên Binance Futures."; return; }
   pairs.push(raw); store.set("solpha_pairs", JSON.stringify(pairs));
   $("addInput").value = ""; msg.textContent = "Đã thêm " + raw + ".";
   renderPairList(); switchPair(symOf(raw)); wsConnect();
@@ -957,7 +1063,10 @@ renderPairList();
 showView(store.get("solpha_view", "signal"));
 
 // Bảng chia nhóm LONG (xanh ▲) / SHORT (đỏ ▼): mỗi dòng có thẻ mã + mô tả ngắn để nhận diện nhanh.
-const SIDE_HEAD = { long: "▲ LONG · mua khi 1D/4H/1H cùng tăng", short: "▼ SHORT · bán khi khung lớn giảm" };
+const SIDE_HEAD = { long: "▲ Điều kiện thuận xu hướng tăng (1D/4H/1H cùng tăng)", short: "▼ Điều kiện thuận xu hướng giảm (khung lớn giảm)" };
+const SIM_WARN = `<div class="muted btwarn">Số liệu mô phỏng trên dữ liệu quá khứ; chưa phản ánh đầy đủ thanh khoản, trượt giá, lỗi kết nối. Kết quả quá khứ không bảo đảm kết quả tương lai.</div>`;
+const smallN = (n) => (n > 0 && n < OPT_RULES.minTrades ? ` <small class="muted">mẫu nhỏ</small>` : "");
+const feePct = () => (SolphaSignals.DEFAULTS.feeRate * 100).toFixed(2).replace(".", ",");
 const nameCell = (x) => `<td class="nm"><span class="code ${x.side}">${x.code}</span><b>${x.name}</b><small>${x.desc}</small></td>`;
 function groupedRows(items, cols, rowHtml) {
   return ["long", "short"].map((side) => {
@@ -965,13 +1074,13 @@ function groupedRows(items, cols, rowHtml) {
     return g.length ? `<tr class="grp ${side}"><td colspan="${cols}">${SIDE_HEAD[side]}</td></tr>` + g.map((x) => `<tr class="r${side[0]}">${nameCell(x)}${rowHtml(x)}</tr>`).join("") : "";
   }).join("");
 }
-// ---- Backtest: đo từng bộ điều kiện (Long A/B, Short S1/S2/S3, điều chỉnh, Momentum) trên dữ liệu thật của Binance ----
+// ---- Backtest: mô phỏng từng bộ điều kiện (Long A/B, Short S1/S2/S3, điều chỉnh, Momentum) trên dữ liệu giá quá khứ của Binance ----
 $("btnBacktest").addEventListener("click", async () => {
   const btn = $("btnBacktest"), out = $("btBox");
   const sym = active;
-  btn.disabled = true; out.innerHTML = `Đang tải ~1.500 nến 5M và khung lớn của ${baseOf(sym)} từ Binance…`;
+  btn.disabled = true; out.innerHTML = `Đang tải ~1.500 nến 5M (khoảng 5 ngày) và khung lớn của ${baseOf(sym)} từ Binance…`;
   try {
-    const [c5, h1, h4, d1, m15] = await Promise.all([loadKlines(sym, "5m", 1500), loadKlines(sym, "1h", 400), loadKlines(sym, "4h", 300), loadKlines(sym, "1d", 200), loadKlines(sym, "15m", 700)]);
+    const [c5, h1, h4, d1, m15] = await Promise.all([loadKlines(sym, "5m", 1500, true), loadKlines(sym, "1h", 400, true), loadKlines(sym, "4h", 300, true), loadKlines(sym, "1d", 200, true), loadKlines(sym, "15m", 700, true)]);
     const closed = (a) => a.slice(0, -1);
     const base = sigOptions(sym);
     const rows = [
@@ -990,16 +1099,16 @@ $("btnBacktest").addEventListener("click", async () => {
     const byCode = (c) => rows.find((x) => x.code === c);
     const r0 = rows[0].r;
     const day = (t) => new Date(t).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
-    out.innerHTML = `<div class="muted"><b>${baseOf(sym)}</b> · từ ${day(r0.from)} đến ${day(r0.to)} · vào ở giá đóng nến, chốt ở 1.5R; Long tối đa 4 giờ, Short tối đa 2 giờ. Nến chạm cả SL và TP tính là thua. Backtest Short bỏ qua bộ lọc funding (không có dữ liệu lịch sử).</div>
-      <div class="table-wrap"><table class="gtable"><thead><tr><th>Bộ điều kiện</th><th>Số lệnh</th><th>Thắng</th><th>R TB/lệnh</th><th>Tổng R</th><th>Sụt tối đa</th></tr></thead><tbody>${groupedRows(rows, 6, ({ r }) =>
-        `<td>${r.n}</td><td>${r.n ? Math.round(r.winRate * 100) + "%" : "—"}</td><td class="${r.avgR >= 0 ? "up" : "down"}">${r.n ? (r.avgR >= 0 ? "+" : "") + fmt(r.avgR) : "—"}</td><td class="${r.totalR >= 0 ? "up" : "down"}">${(r.totalR >= 0 ? "+" : "") + fmt(r.totalR, 1)}R</td><td>${fmt(r.maxDD, 1)}R</td>`)}</tbody></table></div>
+    out.innerHTML = `<div class="muted"><b>${baseOf(sym)}</b> · 5 ngày gần nhất (từ ${day(r0.from)} đến ${day(r0.to)}) · vào ở giá đóng nến, chốt ở 1.5R; Long tối đa 4 giờ, Short tối đa 2 giờ. Nến chạm cả SL và TP tính là lệnh lỗ. Phần Short bỏ qua bộ lọc funding (không có dữ liệu lịch sử).</div>${SIM_WARN}
+      <div class="table-wrap"><table class="gtable"><thead><tr><th>Bộ điều kiện</th><th>Số lệnh</th><th>Lệnh có lãi (mô phỏng)</th><th>R TB/lệnh</th><th>Tổng R</th><th>Sụt tối đa</th></tr></thead><tbody>${groupedRows(rows, 6, ({ r }) =>
+        `<td>${r.n}</td><td>${r.n ? Math.round(r.winRate * 100) + "%" : "—"}${smallN(r.n)}</td><td class="${r.avgR >= 0 ? "up" : "down"}">${r.n ? (r.avgR >= 0 ? "+" : "") + fmt(r.avgR) : "—"}</td><td class="${r.totalR >= 0 ? "up" : "down"}">${(r.totalR >= 0 ? "+" : "") + fmt(r.totalR, 1)}R</td><td>${fmt(r.maxDD, 1)}R</td>`)}</tbody></table></div>
       ${["A+B", "ALL", "ĐC", "M4H"].map(byCode).map((x) => x.r.topWhy && x.r.topWhy.length ? `<div class="why ${x.side}"><span class="code ${x.side}">${x.code}</span> bị loại nhiều nhất vì: ${x.r.topWhy.slice(0, 3).map(([w, c]) => `${w} (${c} nến)`).join(" · ")}</div>` : "").join("")}
-      <div class="muted">Khoảng 5 ngày là mẫu nhỏ — chạy lại mỗi tuần và chỉ tin khi xu hướng lặp lại. Chưa tính phí giao dịch và trượt giá.</div>`;
-  } catch (e) { out.textContent = "Lỗi backtest: " + (e.message || e); }
+      <div class="muted">Mẫu 5 ngày là nhỏ nên chỉ mang tính tham khảo. Đã trừ phí và trượt giá ước tính ${feePct()}% mỗi lệnh (chưa phản ánh đầy đủ thanh khoản thực và lỗi kết nối).</div>`;
+  } catch (e) { out.textContent = "Không chạy được backtest: " + friendlyErr(e); }
   btn.disabled = false;
 });
 
-// ---- Soi lại thời điểm: từng nến 5M quanh mốc anh chọn, app quyết định gì và vì sao ----
+// ---- Soi lại thời điểm: từng nến 5M quanh mốc bạn chọn, app đánh giá điều kiện nào và vì sao ----
 (function initReplay() {
   const inp = $("rpTime"), btn = $("btnReplay"), out = $("rpBox");
   if (!inp) return;
@@ -1027,12 +1136,12 @@ $("btnBacktest").addEventListener("click", async () => {
       out.innerHTML = `<div class="muted"><b>${baseOf(sym)}</b> · ${rows.length} nến 5M từ ${hm(from)} đến ${hm(to)} (giờ VN). ${hits.length ? "Có tín hiệu lúc: " + hits.map((r) => `<b>${hm(r.t)}</b> ${r.main.side ? r.main.side.toUpperCase() + " " + r.main.setup : ""}${r.mom.side ? " " + r.mom.side.toUpperCase() + " M4H" : ""}`).join(" · ") : "<b>Không có tín hiệu nào</b> — xem cột lý do bên dưới."} Bộ lọc funding không áp dụng khi xem lại.</div>
         <div class="table-wrap rpwrap"><table><thead><tr><th>Giờ</th><th>Mở → Đóng</th><th>1D 4H 1H 15M</th><th>Bộ chính</th><th>Momentum 4H/1H</th></tr></thead><tbody>${rows.map((r) =>
           `<tr class="${r.main.side || r.mom.side ? "rphit" : ""}"><td><b>${hm(r.t)}</b></td><td>${fp(r.o)} → ${fp(r.c)}</td><td>${arrow(r.dirs.d1)} ${arrow(r.dirs.h4)} ${arrow(r.dirs.h1)} ${arrow(r.dirs.m15)}</td><td>${cell(r.main)}</td><td>${cell(r.mom)}</td></tr>`).join("")}</tbody></table></div>`;
-    } catch (e) { out.textContent = "Lỗi tải dữ liệu: " + (e.message || e); }
+    } catch (e) { out.textContent = "Không tải được dữ liệu: " + friendlyErr(e); }
     btn.disabled = false;
   });
 })();
 
-// ---- Tối ưu 30 ngày: đo từng điều kiện trên dữ liệu Binance thật, chỉ giữ điều kiện đạt chuẩn ----
+// ---- Tối ưu 30 ngày: mô phỏng từng điều kiện trên dữ liệu quá khứ của Binance, đánh dấu điều kiện đủ ngưỡng thống kê tối thiểu ----
 async function loadHistory(sym, interval, minutes, days, warmup) {
   const need = Math.ceil(days * 1440 / minutes) + warmup, out = [];
   let end = Date.now();
@@ -1092,12 +1201,12 @@ $("btnOptimize") && $("btnOptimize").addEventListener("click", async () => {
     const pct = (x) => Math.round(x * 100) + "%", r2 = (x) => (x == null ? "—" : (x >= 0 ? "+" : "") + fmt(x));
     const day = (t) => new Date(t).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
     const sorted = rows.slice().sort((a, b) => (b.pass - a.pass) || (b.r.winRate - a.r.winRate) || (b.r.avgR - a.r.avgR));
-    out.innerHTML = `<div class="muted"><b>${coin}</b> · dữ liệu ${day(optResult.from)} → ${day(optResult.to)} · đã trừ phí ${(SolphaSignals.DEFAULTS.feeRate * 100).toFixed(2)}%/lệnh · đạt chuẩn = ≥ ${OPT_RULES.minTrades} lệnh, thắng ≥ ${pct(OPT_RULES.minWin)}, R TB sau phí &gt; 0. "Nửa đầu / nửa sau" để xem có ổn định không.</div>
-      <div class="table-wrap"><table class="gtable"><thead><tr><th>Điều kiện</th><th>Lệnh</th><th>Thắng</th><th>R TB</th><th>Tổng R</th><th>Nửa đầu / sau</th><th>Kết luận</th></tr></thead><tbody>${groupedRows(sorted, 7, (x) =>
-        `<td>${x.r.n}</td><td>${x.r.n ? pct(x.r.winRate) : "—"}</td><td class="${x.r.avgR >= 0 ? "up" : "down"}">${x.r.n ? r2(x.r.avgR) : "—"}</td><td>${r2(x.r.totalR)}R</td><td>${r2(x.h1)} / ${r2(x.h2)}</td><td>${x.pass ? '<span class="tag tang">GIỮ</span>' : '<span class="tag in">TẮT</span>'}</td>`)}</tbody></table></div>
-      ${filters.map((f) => `<div class="muted">${f.name}: bật ${f.on.n} lệnh, R TB ${r2(f.on.avgR)} · tắt ${f.off.n} lệnh, R TB ${r2(f.off.avgR)} → <b>${f.keep ? "BẬT" : "TẮT"}</b></div>`).join("")}
-      ${chosen.length ? `<div class="jactions"><button id="btnApplyOpt" class="btn primary">Áp dụng: chỉ giữ ${chosen.length} điều kiện đạt chuẩn</button></div>`
-        : `<div class="muted"><b>Không điều kiện nào đạt chuẩn trong 30 ngày qua</b> — giữ nguyên cài đặt hiện tại, không tự tắt hết.</div>`}`;
+    out.innerHTML = `<div class="muted"><b>${coin}</b> · dữ liệu ${day(optResult.from)} → ${day(optResult.to)} · 30 ngày · đã trừ phí và trượt giá ước tính ${feePct()}%/lệnh · "đủ ngưỡng" = đạt ngưỡng thống kê tối thiểu của app (≥ ${OPT_RULES.minTrades} lệnh mô phỏng, ≥ ${pct(OPT_RULES.minWin)} lệnh có lãi, R TB sau phí &gt; 0) — không phải bảo chứng hiệu quả. "Nửa đầu / nửa sau" để xem có ổn định không.</div>${SIM_WARN}
+      <div class="table-wrap"><table class="gtable"><thead><tr><th>Điều kiện</th><th>Lệnh</th><th>Lệnh có lãi (mô phỏng)</th><th>R TB</th><th>Tổng R</th><th>Nửa đầu / sau</th><th>Ngưỡng</th></tr></thead><tbody>${groupedRows(sorted, 7, (x) =>
+        `<td>${x.r.n}</td><td>${x.r.n ? pct(x.r.winRate) : "—"}${smallN(x.r.n)}</td><td class="${x.r.avgR >= 0 ? "up" : "down"}">${x.r.n ? r2(x.r.avgR) : "—"}</td><td>${r2(x.r.totalR)}R</td><td>${r2(x.h1)} / ${r2(x.h2)}</td><td>${x.pass ? '<span class="tag tang">Đủ ngưỡng</span>' : '<span class="tag in">Chưa đủ ngưỡng</span>'}</td>`)}</tbody></table></div>
+      ${filters.map((f) => `<div class="muted">${f.name}: bật ${f.on.n} lệnh, R TB ${r2(f.on.avgR)} · tắt ${f.off.n} lệnh, R TB ${r2(f.off.avgR)} → <b>${f.keep ? "đủ ngưỡng (bật)" : "chưa đủ ngưỡng (tắt)"}</b></div>`).join("")}
+      ${chosen.length ? `<div class="jactions"><button id="btnApplyOpt" class="btn primary">Áp dụng: chỉ bật ${chosen.length} điều kiện đủ ngưỡng</button></div>`
+        : `<div class="muted"><b>Không điều kiện nào đủ ngưỡng trong 30 ngày qua</b> — giữ nguyên cài đặt hiện tại, không tự tắt hết.</div>`}`;
     $("btnApplyOpt") && $("btnApplyOpt").addEventListener("click", () => {
       const o = optResult.sym;
       for (const x of optResult.rows) store.set(pkey(x.key, o), x.pass ? "1" : "0");
@@ -1107,13 +1216,13 @@ $("btnOptimize") && $("btnOptimize").addEventListener("click", async () => {
       $("btnApplyOpt").textContent = "Đã áp dụng ✓"; $("btnApplyOpt").disabled = true;
       fullScan("manual", true);
     });
-  } catch (e) { out.textContent = "Lỗi tối ưu: " + (e.message || e); }
+  } catch (e) { out.textContent = "Không chạy được tối ưu: " + friendlyErr(e); }
   btn.disabled = false;
 });
 function renderOptHint() {
   let a = null; try { a = JSON.parse(pget("solpha_opt_applied", "null")); } catch (_) {}
   const box = $("optBox"); if (!box) return;
-  box.innerHTML = a ? `<div class="muted">${baseOf(active)} · lần áp dụng gần nhất: ${new Date(a.at).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })} · đang giữ: ${a.keep.join(", ") || "—"}. Nên chạy lại mỗi tuần.</div>` : "";
+  box.innerHTML = a ? `<div class="muted">${baseOf(active)} · lần áp dụng gần nhất: ${new Date(a.at).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })} · đang bật: ${a.keep.join(", ") || "—"}. Nên chạy lại mỗi tuần.</div>` : "";
 }
 renderOptHint();
 $("btBox") && ($("btBox").innerHTML = "");
@@ -1124,7 +1233,7 @@ $("btnTestNotify") && $("btnTestNotify").addEventListener("click", async () => {
   if ("Notification" in window && Notification.permission === "default") { try { await Notification.requestPermission(); } catch (_) {} }
   const perm = "Notification" in window ? Notification.permission : "không hỗ trợ";
   const sw = "serviceWorker" in navigator ? ((await navigator.serviceWorker.getRegistration()) ? "đã đăng ký" : "CHƯA đăng ký") : "không hỗ trợ";
-  const res = await notify("SOLPHA — thông báo thử", "Nếu anh thấy dòng này trên khay thông báo và máy rung thì cảnh báo hoạt động.", "solpha-test");
+  const res = await notify("SOLPHA · thông báo thử", "Nếu bạn thấy dòng này trên khay thông báo và máy rung thì thông báo hoạt động.", "solpha-test");
   const standalone = window.matchMedia("(display-mode: standalone)").matches ? "đang chạy như app đã cài" : "đang chạy trong trình duyệt (chưa mở từ icon)";
   out.innerHTML = `Realtime: <b>${wsOk() ? "⚡ " : ""}${wsInfo}</b><br>Quyền: <b>${perm}</b> · Service worker: <b>${sw}</b> · Kết quả gửi: <b>${res}</b> · ${standalone}.<br>` +
     (perm === "granted" && res === "ok" ? "App đã gửi. <b>Không thấy thông báo / không rung</b> → lỗi nằm ở Android: Cài đặt → Ứng dụng → SOLPHA (hoặc Chrome) → Thông báo: bật, cho phép rung/âm thanh, mức độ ưu tiên cao; tắt Không làm phiền / chế độ im lặng; Pin → không hạn chế." :

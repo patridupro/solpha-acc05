@@ -46,7 +46,7 @@ Người mua chọn và thanh toán một trong hai mức. Mức áp dụng đư
 6. Tuyên bố hoặc ngụ ý rằng Bên bán bảo trợ, cấp phép hay liên kết với sản phẩm của Người mua nếu không có thoả thuận bằng văn bản.
 
 ### 5. Thành phần bên thứ ba
-Sản phẩm gọi API dữ liệu công khai của Binance và (tuỳ chọn) tải phông chữ từ Google Fonts; việc đóng gói Android phụ thuộc Google Play, Bubblewrap/PWABuilder. Các dịch vụ này có điều khoản riêng; không thuộc giấy phép này. Tên và nhãn hiệu của bên thứ ba thuộc chủ sở hữu tương ứng; Sản phẩm không liên kết với họ.
+Sản phẩm gọi API dữ liệu công khai của Binance; phông Roboto được đóng gói sẵn và tự lưu trữ trong gói (giấy phép phông ở `fonts/LICENSE.txt`), không gọi Google Fonts; việc đóng gói Android phụ thuộc Google Play, Bubblewrap/PWABuilder. Các dịch vụ này có điều khoản riêng; không thuộc giấy phép này. Tên và nhãn hiệu của bên thứ ba thuộc chủ sở hữu tương ứng; Sản phẩm không liên kết với họ.
 
 ### 6. Miễn trừ rủi ro tài chính — KHÔNG phải tư vấn
 Sản phẩm là **công cụ phân tích kỹ thuật tham khảo**. Nó không phải tư vấn đầu tư, tư vấn tài chính, môi giới hay khuyến nghị mua/bán. Giao dịch futures/đòn bẩy có thể mất toàn bộ vốn. Kết quả backtest không đảm bảo kết quả tương lai. Người mua và người dùng cuối tự chịu mọi quyết định giao dịch.
@@ -112,7 +112,7 @@ The Buyer chooses and pays for one tier. The applicable tier is stated on the or
 6. State or imply that the Seller endorses, licenses or is affiliated with the Buyer's product without written agreement.
 
 ### 5. Third-party components
-The Product calls Binance's public market-data API and (optionally) loads fonts from Google Fonts; Android packaging depends on Google Play and Bubblewrap/PWABuilder. Those services have their own terms and are outside this license. Third-party names and trademarks belong to their owners; the Product is not affiliated with them.
+The Product calls Binance's public market-data API; the Roboto font is bundled and self-hosted in the package (its license is in `fonts/LICENSE.txt`) and the Product does not call Google Fonts; Android packaging depends on Google Play and Bubblewrap/PWABuilder. Those services have their own terms and are outside this license. Third-party names and trademarks belong to their owners; the Product is not affiliated with them.
 
 ### 6. Financial-risk disclaimer — NOT advice
 The Product is a **reference technical-analysis tool**. It is not investment advice, financial advice, brokerage or a recommendation to buy or sell. Futures/leveraged trading can lose your entire capital. Backtest results do not guarantee future results. The Buyer and end users alone are responsible for every trading decision.

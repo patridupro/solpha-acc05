@@ -47,7 +47,7 @@
     <p>Phiên bản 1.0.0 trên Google Play không có gói trả phí. Phần này chỉ áp dụng từ khi một phiên bản sau bật gói Pro; khi đó chúng tôi sẽ cập nhật trang này trước hoặc cùng lúc.</p>
     <p>Nếu app bán gói trả phí trên Google Play, giao dịch do Google Play Billing xử lý theo <a href="https://policies.google.com/privacy" rel="noopener" target="_blank">chính sách của Google</a>; chúng tôi không nhận thông tin thẻ. Để mở tính năng của gói, máy chủ xác minh của chúng tôi (chạy trên Cloudflare Workers) lưu:</p>
     <ul>
-      <li>mã định danh ngẫu nhiên (UUID) do app sinh ra trên thiết bị của bạn, không gắn với tên hay email;</li>
+      <li>mã định danh ngẫu nhiên (UUID) do app sinh ra trên thiết bị của bạn, không gắn với tên hay email (mã này được gửi kèm yêu cầu tới máy chủ xác minh nên có thể xuất hiện trong nhật ký kỹ thuật của nhà cung cấp hạ tầng);</li>
       <li>mã băm (SHA-256) của mã giao dịch Google Play (purchase token) và bản mã hoá của chính mã đó, dùng để làm mới trạng thái gói;</li>
       <li>gói đã mua, trạng thái gói (đang dùng thử, đang hiệu lực, đã huỷ, đã hết hạn) và ngày hết hạn.</li>
     </ul>

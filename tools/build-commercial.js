@@ -382,11 +382,16 @@ function build(options) {
   const iconFiles = fs.readdirSync(path.join(ROOT, "icons", "solpha")).sort();
   for (const f of iconFiles) copy("icons/solpha/" + f, "icons/" + f);
 
+  // --- phông Roboto tự host (không gọi Google Fonts)
+  const fontFiles = exists("fonts") ? fs.readdirSync(path.join(ROOT, "fonts")).sort() : [];
+  for (const f of fontFiles) copy("fonts/" + f);
+
   // --- service worker (danh sách cache lập từ tệp thực sự có trong gói)
   const assets = ["./", "./index.html", "./styles.css", "./solpha-theme.css", "./brand.js", "./signals.js", "./app.js", "./journal.js"];
   if (hasBilling) assets.push("./billing.js");
   assets.push("./manifest.webmanifest");
   for (const f of iconFiles) if (/\.(png|svg)$/.test(f)) assets.push("./icons/" + f);
+  for (const f of fontFiles) if (/\.woff2$/.test(f)) assets.push("./fonts/" + f);
   assets.push("./privacy.html", "./terms.html");
   put("sw.js", transformSw(readText("sw.js"), version, assets));
 
