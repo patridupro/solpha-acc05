@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#189848" />
   <title>SOLPHA · Chính sách quyền riêng tư</title>
   <link rel="icon" href="icons/favicon-32.png" />
+  <link rel="preload" href="fonts/roboto-latin-400.woff2" as="font" type="font/woff2" crossorigin />
   <script src="brand.js"></script>
   <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="solpha-theme.css" />
@@ -14,10 +15,10 @@
   <main class="legal">
     <p><a href="./">← Về app</a></p>
     <h1>Chính sách quyền riêng tư</h1>
-    <p class="muted">SOLPHA · Futures Desk · cập nhật 12/11/2026 · <span lang="en">English summary at the end</span></p>
+    <p class="muted">SOLPHA · Futures Desk · cập nhật 14/11/2026 · <span lang="en">English summary at the end</span></p>
 
     <div class="box">
-      <b>Tóm tắt:</b> SOLPHA không có tài khoản, không có máy chủ riêng và <b>không thu thập, không lưu, không bán</b> bất kỳ dữ liệu cá nhân nào của bạn. Mọi cài đặt và nhật ký giao dịch nằm trong bộ nhớ trên thiết bị của bạn. App chỉ gọi tới Binance để lấy dữ liệu giá công khai.
+      <b>Tóm tắt:</b> SOLPHA không có tài khoản và không có máy chủ riêng của đơn vị phát hành (trừ phần xác minh gói trả phí, chỉ khi gói Pro được bật: xem mục 4). Chúng tôi <b>không thu thập, không lưu và không bán</b> dữ liệu cá nhân của bạn. Mọi cài đặt và nhật ký giao dịch nằm trong bộ nhớ trên thiết bị của bạn. Lưu ý về địa chỉ IP: khi app tải trang và lấy giá, địa chỉ IP và thông tin kết nối chuẩn của thiết bị (loại trình duyệt, địa chỉ trang) được các bên cung cấp dịch vụ mà app gọi tới (Binance và nhà cung cấp hosting trang web) nhìn thấy theo cách hoạt động thông thường của internet và có thể nằm trong nhật ký máy chủ của họ. Các bên đó có chính sách riêng; chúng tôi không nhận hay đọc các nhật ký đó để nhận diện cá nhân bạn.
     </div>
 
     <h2>1. Đơn vị phát hành</h2>
@@ -25,10 +26,12 @@
 
     <h2>2. Dữ liệu app xử lý</h2>
     <ul>
-      <li><b>Lưu trên thiết bị (localStorage):</b> danh sách cặp theo dõi, cài đặt tín hiệu, vốn và % rủi ro bạn nhập, nhật ký giao dịch, nhật ký quét, kế hoạch lệnh gần nhất. Dữ liệu này không rời khỏi thiết bị; xoá app hoặc xoá dữ liệu trang web là mất toàn bộ.</li>
-      <li><b>Gửi tới Binance (fapi.binance.com, fstream.binance.com, api.binance.com):</b> mã cặp và khung thời gian để lấy giá, nến, mark price, funding công khai. Binance thấy địa chỉ IP của bạn như với mọi trang web; app không gửi tên, email hay định danh nào. Xem <a href="https://www.binance.com/en/privacy" rel="noopener" target="_blank">chính sách của Binance</a>.</li>
-      <li><b>Google Fonts (fonts.googleapis.com, fonts.gstatic.com):</b> tải font Roboto; Google thấy địa chỉ IP của bạn.</li>
-      <li><b>Thông báo:</b> chỉ khi bạn cho phép. Thông báo được tạo ngay trên thiết bị, không qua máy chủ đẩy nào.</li>
+      <li><b>Lưu trên thiết bị (localStorage, sessionStorage):</b> danh sách cặp theo dõi, cài đặt tín hiệu, vốn và % rủi ro bạn nhập, nhật ký giao dịch và ghi chú bạn tự nhập, nhật ký quét, kế hoạch tham khảo gần nhất, danh sách điều kiện kỹ thuật đã thông báo, cờ cho biết bạn đã đọc cảnh báo rủi ro, tuỳ chọn hiển thị. Dữ liệu này không rời khỏi thiết bị; xoá app hoặc xoá dữ liệu trang web là mất toàn bộ.</li>
+      <li><b>Bản lưu tệp của app (Cache Storage do service worker quản lý):</b> bản sao các tệp giao diện, phông chữ và biểu tượng của app để app mở được khi mất mạng. Không chứa dữ liệu cá nhân. Không dùng cookie và không dùng IndexedDB.</li>
+      <li><b>Gửi tới Binance (fapi.binance.com, fapi1.binance.com, api.binance.com và kênh WebSocket fstream.binance.com):</b> mã cặp (ví dụ SOLUSDT) và khung thời gian để lấy giá, nến, mark price, funding công khai. Binance thấy địa chỉ IP, loại trình duyệt và địa chỉ trang web của app (Referer) của bạn như với mọi trang web; app không gửi tên, email hay định danh nào. Xem <a href="https://www.binance.com/en/privacy" rel="noopener" target="_blank">chính sách của Binance</a>. Binance là nguồn dữ liệu công khai, không phải nhà xử lý dữ liệu thay mặt chúng tôi.</li>
+      <li><b>Hosting trang web (hiện là Cloudflare Pages):</b> app và các trang này được phục vụ từ nhà cung cấp hosting. Nhà cung cấp có thể ghi nhật ký kỹ thuật (địa chỉ IP, thời điểm, tên tệp được tải) theo chính sách của họ. Chúng tôi không dùng nhật ký này để nhận diện cá nhân và không bật công cụ phân tích truy cập bổ sung nào. Xem <a href="https://www.cloudflare.com/privacypolicy/" rel="noopener" target="_blank">chính sách của Cloudflare</a>.</li>
+      <li><b>Phông chữ:</b> phông Roboto được lưu cùng app (tự lưu trữ), app không gọi Google để tải phông.</li>
+      <li><b>Thông báo:</b> chỉ khi bạn bấm bật và cho phép. Thông báo được tạo ngay trên thiết bị, không qua máy chủ đẩy nào.</li>
       <li><b>Giữ màn hình sáng:</b> tuỳ chọn, chỉ khi bạn bật trong Cài đặt.</li>
     </ul>
 
@@ -36,24 +39,31 @@
     <ul>
       <li>Không tài khoản, không mật khẩu, không email, không số điện thoại.</li>
       <li>Không API key sàn, không kết nối tới tài khoản giao dịch của bạn, không đặt lệnh thay bạn.</li>
-      <li>Không công cụ phân tích hành vi, không quảng cáo, không SDK bên thứ ba.</li>
+      <li>Không công cụ phân tích hành vi, không quảng cáo, không SDK phân tích, quảng cáo hay theo dõi của bên thứ ba.</li>
       <li>Không vị trí, danh bạ, ảnh, micro, camera.</li>
     </ul>
 
-    <h2>4. Thanh toán (khi có)</h2>
-    <p>Nếu app bán gói trả phí trên Google Play, giao dịch do Google Play Billing xử lý theo <a href="https://policies.google.com/privacy" rel="noopener" target="_blank">chính sách của Google</a>. Chúng tôi chỉ nhận mã xác nhận mua hàng để mở tính năng, không nhận thông tin thẻ.</p>
+    <h2>4. Thanh toán (chỉ áp dụng khi gói Pro được bật)</h2>
+    <p>Phiên bản 1.0.0 trên Google Play không có gói trả phí. Phần này chỉ áp dụng từ khi một phiên bản sau bật gói Pro; khi đó chúng tôi sẽ cập nhật trang này trước hoặc cùng lúc.</p>
+    <p>Nếu app bán gói trả phí trên Google Play, giao dịch do Google Play Billing xử lý theo <a href="https://policies.google.com/privacy" rel="noopener" target="_blank">chính sách của Google</a>; chúng tôi không nhận thông tin thẻ. Để mở tính năng của gói, máy chủ xác minh của chúng tôi (chạy trên Cloudflare Workers) lưu:</p>
+    <ul>
+      <li>mã định danh ngẫu nhiên (UUID) do app sinh ra trên thiết bị của bạn, không gắn với tên hay email;</li>
+      <li>mã băm (SHA-256) của mã giao dịch Google Play (purchase token) và bản mã hoá của chính mã đó, dùng để làm mới trạng thái gói;</li>
+      <li>gói đã mua, trạng thái gói (đang dùng thử, đang hiệu lực, đã huỷ, đã hết hạn) và ngày hết hạn.</li>
+    </ul>
+    <p>Địa chỉ IP chỉ được dùng tạm thời trong bộ nhớ để chống lạm dụng và không được lưu. Chúng tôi không lưu tên, email hay thẻ thanh toán. Dữ liệu được giữ trong thời gian gói còn hiệu lực và thêm [SỐ NGÀY] ngày sau đó, trừ phần pháp luật yêu cầu giữ lâu hơn. Để yêu cầu xoá, xem mục 6.</p>
 
     <h2>5. Trẻ em</h2>
     <p>App dành cho người từ 18 tuổi trở lên và không hướng tới trẻ em.</p>
 
-    <h2>6. Quyền của bạn</h2>
-    <p>Vì dữ liệu nằm trên thiết bị của bạn, bạn tự xem, sửa, xoá bằng cách xoá dữ liệu app (Android: Cài đặt → Ứng dụng → SOLPHA → Bộ nhớ → Xoá dữ liệu). Thắc mắc gửi về [EMAIL].</p>
+    <h2 id="xoa-du-lieu">6. Quyền của bạn và cách xoá dữ liệu</h2>
+    <p>Vì dữ liệu của app nằm trên thiết bị của bạn, bạn tự xem, sửa, xoá bằng cách xoá dữ liệu app (Android: Cài đặt → Ứng dụng → SOLPHA → Bộ nhớ → Xoá dữ liệu). Với nhật ký các bên thứ ba nêu ở mục 2 (Binance, nhà cung cấp hosting), vui lòng liên hệ trực tiếp họ. Nếu gói Pro được bật và bạn muốn xoá dữ liệu gói đã lưu ở mục 4, gửi yêu cầu về [EMAIL]. Mọi thắc mắc khác cũng gửi về [EMAIL].</p>
 
     <h2>7. Thay đổi</h2>
     <p>Bản cập nhật được đăng tại trang này kèm ngày cập nhật.</p>
 
     <h2 lang="en">English summary</h2>
-    <p lang="en">SOLPHA has no accounts and no server of its own. It does not collect, store or sell personal data. Settings and your trading journal stay in your device's local storage. The app only requests public market data from Binance (your IP is visible to Binance as with any website) and loads the Roboto font from Google Fonts. Notifications are generated on-device. If paid plans are offered on Google Play, payments are handled by Google Play Billing; we never see card details. Intended for users 18+. Contact: [EMAIL].</p>
+    <p lang="en">SOLPHA has no accounts and no server of its own (except the purchase-verification server, only if the paid Pro plan is enabled). It does not collect, store or sell personal data. Settings and your trading journal stay in your device's local storage; the service worker keeps a cache of the app files so it can work offline. To show prices the app requests public market data from Binance (fapi.binance.com, fapi1.binance.com, api.binance.com, fstream.binance.com), and the app files are served by a web hosting provider (currently Cloudflare Pages); as with any website, your IP address, browser type and the page address are visible to them and may appear in their server logs, under their own policies. The Roboto font is bundled with the app; the app does not call Google Fonts. Notifications are generated on-device. Version 1.0.0 on Google Play has no paid plan. If a paid plan is enabled later, payments are handled by Google Play Billing (we never see card details) and our verification server stores a random app-generated ID, a hash and an encrypted copy of the purchase token, the plan and its status and expiry date. Intended for users 18+. Contact: [EMAIL].</p>
   </main>
 </body>
 </html>

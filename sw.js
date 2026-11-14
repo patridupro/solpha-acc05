@@ -1,10 +1,11 @@
-const CACHE = "solpha-v42";
+const CACHE = "solpha-v43";
 // Chỉ nạp sẵn tệp trung tính + tệp thương hiệu SOLPHA. Tệp của bản web thường (icon.svg, manifest.webmanifest, icons/*.png)
 // KHÔNG nạp sẵn: chúng chỉ vào cache khi chính bản đó tải về (fetch handler bên dưới), nên máy dùng Play không lưu chúng.
 const ASSETS = [
   "./", "./index.html", "./styles.css", "./signals.js", "./app.js", "./journal.js",
   "./brand.js", "./solpha-theme.css", "./manifest-solpha.webmanifest", "./icons/solpha/icon-192.png", "./icons/solpha/icon-512.png",
-  "./privacy.html", "./terms.html"
+  "./privacy.html", "./terms.html",
+  "./fonts/roboto-latin-400.woff2", "./fonts/roboto-latin-500.woff2", "./fonts/roboto-latin-700.woff2", "./fonts/roboto-vietnamese-400.woff2", "./fonts/roboto-vietnamese-500.woff2", "./fonts/roboto-vietnamese-700.woff2", "./fonts/roboto-latin-ext-400.woff2", "./fonts/roboto-latin-ext-500.woff2", "./fonts/roboto-latin-ext-700.woff2"
 ];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
